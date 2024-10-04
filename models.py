@@ -1,3 +1,17 @@
+import pickle
+import libemg
+import matplotlib.pyplot as plt
+import torch.nn as nn
+import torch
+from torch import optim
+import numpy as np
+import random
+from config import Config
+import time
+config = Config()
+
+
+
 class Memory:
     def __init__(self, max_len=None):
         # What are the current targets for the model?
@@ -109,3 +123,185 @@ class Memory:
         self.experience_ids     = obj.experience_ids
         self.memories_stored    = obj.memories_stored
         self.experience_timestamps = obj.experience_timestamps
+
+
+from sklearn.decomposition import PCA
+class MLP(nn.Module):
+    def __init__(self, input_shape):
+        super(MLP, self).__init__()
+        self.input_shape = input_shape
+        self.net = None
+
+        self.foreground_device = "cpu"
+        self.train_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.setup_net()
+        self.setup_optimizer()
+
+        self.batch_size = config.batch_size
+        self.frames_saved = 0
+
+    def setup_net(self):
+        self.net = nn.Sequential(
+            nn.Linear(self.input_shape, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(32,16),
+            nn.BatchNorm1d(16),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(16, 10),
+            nn.BatchNorm1d(10),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(10,2),
+            nn.Tanh()
+        )
+    
+    def setup_optimizer(self):
+        # set optimizer
+        self.optimizer_classifier = optim.Adam(self.net.parameters(), lr=config.learning_rate)
+        if config.loss_function == "MSELoss":
+            self.loss_function = nn.MSELoss()
+        
+    def forward(self,x):
+        if type(x) == np.ndarray:
+            x = torch.tensor(x)
+        x.requires_grad=False
+        return self.net(x)
+    
+    def predict(self, data):
+        self.predict_proba(data)
+        # probs = self.predict_proba(data)
+        # return np.array([np.where(p==np.max(p))[0][0] for p in probs])
+
+    def predict_proba(self,data):
+        if type(data) == np.ndarray:
+            data = torch.tensor(data, dtype=torch.float32)
+        data = data.to("cpu").clone()
+        output = self.forward(data)
+        return output.detach().numpy()
+
+
+    def fit(self, epochs, shuffle_every_epoch=True, memory=None):
+        self.net.to(self.train_device)
+        num_batch = len(memory) // self.batch_size
+        losses = []
+        for e in range(epochs):
+            t = time.time()
+            if shuffle_every_epoch:
+                memory.shuffle()
+            loss = []
+            batch_start = 0
+            if num_batch > 0:
+                for b in range(num_batch):
+                    batch_end = batch_start + self.batch_size
+                    input = memory.experience_data[batch_start:batch_end,:].to(self.train_device)
+                    targets = memory.experience_targets[batch_start:batch_end].to(self.train_device)
+                    predictions = self.forward(input)
+                    loss_value = self.loss_function(predictions, targets)
+                    self.optimizer_classifier.zero_grad()
+                    loss_value.backward()
+                    self.optimizer_classifier.step()
+                    loss.append(loss_value.item())
+                    batch_start = batch_end
+                losses.append(sum(loss)/len(loss))
+                with open(f"Data/subject{config.subjectID}/{config.stage}/trial_{config.model}/loss.csv", 'a') as f:
+                    f.writelines([str(t) + "," + str(i) + "\n" for i in loss])
+        self.net.to(self.foreground_device)
+
+    def get_pc_thresholds(self, memory):
+        PC_Vals = memory.experience_data[:,:].mean(axis=1)
+        probabilities = self.forward(memory.experience_data)
+        probabilities = torch.tensor(probabilities)
+        predictions   = torch.argmax(probabilities,1)
+
+        lower_t = {}
+        upper_t = {}
+        for c in range(5):
+            valid_ids = predictions == c
+            if sum(valid_ids) == 0:
+                lower_t[c] = config.WENG_SPEED_MIN
+                upper_t[c] = config.WENG_SPEED_MAX
+            else:
+                sorted, _ = torch.sort(PC_Vals[valid_ids])
+                lower_t[c] = sorted[int(len(sorted)*config.lower_PC_percentile)].item()
+                upper_t[c] = sorted[int(len(sorted)*config.upper_PC_percentile)].item()
+        return lower_t, upper_t
+
+        
+    def adapt(self, memory):
+        self.net.to(self.train_device)
+        self.train()
+        self.fit(epochs=config.adaptation_epochs, memory=memory)
+        if config.visualize_training:
+            self.visualize(memory=memory)
+        self.net.to(self.foreground_device)
+        self.eval()
+
+    def visualize(self, memory):
+        predictions = self.forward(memory.experience_data.to(self.train_device))
+        predictions = predictions.detach().cpu().numpy()
+        def create_frame(t):
+            pca = PCA(2)
+            transformed_data = pca.fit_transform(memory.experience_data.detach().numpy())
+            fig = plt.figure(figsize=(12,6))
+            gs = fig.add_gridspec(2,5)
+            ax2 = fig.add_subplot(gs[0,0])
+            ax3 = fig.add_subplot(gs[0,1])
+
+            ax21 = fig.add_subplot(gs[1,0])
+            ax31 = fig.add_subplot(gs[1,1])
+            ax41 = fig.add_subplot(gs[1,2])
+            ax51 = fig.add_subplot(gs[1,3])
+            ax61 = fig.add_subplot(gs[1,4])
+
+
+            ax2.scatter(transformed_data[:,0], transformed_data[:,1], c=memory.experience_targets[:,0], alpha=0.3, cmap="inferno", vmin=-1, vmax=1,s=2)
+            ax2.set_title("SGT - F-E")
+            points = ax3.scatter(transformed_data[:,0], transformed_data[:,1], c=memory.experience_targets[:,1], alpha=0.3, cmap="inferno", vmin=-1, vmax=1,s=2)
+            ax2.set_title("SGT - UD-RD")
+            fig.colorbar(points)
+
+            plt.tight_layout()
+
+            plt.savefig(f"Figures/Animation/img_{str(self.frames_saved).zfill(3)}_S{config.subjectID}_T{config.trial}")
+            plt.close()
+
+        create_frame(self.frames_saved)
+        self.frames_saved += 1
+
+
+
+import pickle
+def setup_classifier(odh,
+                    save_dir,
+                    smi):
+    if config.stage == "fitts":
+        model_to_load = f"Data/subject{config.subjectID}/sgt/trial_{config.model}/sgt_mdl.pkl"
+    with open(model_to_load, 'rb') as handle:
+        loaded_mdl = pickle.load(handle)
+
+   
+    # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
+    feature_list = config.features
+
+
+    if smi is None:
+        smm = False
+    else:
+        smm = True
+    classifier = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
+                                                            window_size=config.window_length,
+                                                            window_increment=config.window_increment,
+                                                            online_data_handler=odh,
+                                                            features=feature_list,
+                                                            file_path = save_dir,
+                                                            file=True,
+                                                            smm=smm,
+                                                            smm_items=smi,
+                                                            std_out=False)
+    classifier.predictor.model.net.eval()
+    classifier.run(block=False)
+    return classifier
