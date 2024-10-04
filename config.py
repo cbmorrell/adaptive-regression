@@ -7,7 +7,7 @@ class Config:
         # usb towards the hand
         self.subjectID = 1000
         self.model = 1 # 1: sgt, 2: sgt-ciil
-        self.stage = "sgt" #sgt, fitts
+        self.stage = "fitts" #sgt, 
 
         self.get_device_parameters()
         self.get_feature_parameters()
@@ -49,8 +49,8 @@ class Config:
             self.log_to_file = True
     def get_classifier_parameters(self):
         self.oc_output_format = "probabilities"
-        self.shared_memory_items = [["classifier_output", (100,4), np.double], #timestamp, class prediction, confidence
-                                    ["classifier_input", (100,1+self.input_shape), np.double], # timestamp, <- features ->
+        self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, class prediction, confidence
+                                    ["model_input", (100,1+self.input_shape), np.double], # timestamp, <- features ->
                                     ["adapt_flag", (1,1), np.int32],
                                     ["active_flag", (1,1), np.int8]]
 
@@ -78,7 +78,8 @@ class Config:
     
     def get_feature_parameters(self):
         self.features = ["WENG"]
-        self.feature_dictionary = {"WENG_fs": 1500}
+        # self.feature_dictionary = {"WENG_fs": 1500}
+        self.feature_dictionary = {}
         fe = libemg.feature_extractor.FeatureExtractor()
         fake_window = np.random.randn(1,self.num_channels,self.window_length)
         returned_features = fe.extract_features(self.features, fake_window, self.feature_dictionary)
