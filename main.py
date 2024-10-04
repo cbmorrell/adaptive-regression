@@ -1,4 +1,4 @@
-from screen_guided_training import ScreenGuidedTraining, prepare_model_from_sgt #prepare_blank_model, visualize_sgt
+from screen_guided_training import ScreenGuidedTraining, prepare_model_from_sgt
 from isofitts import Isofitts
 import utils
 from config import Config
@@ -6,12 +6,10 @@ config = Config()
 
 def main():
     if config.stage == "sgt":
-        # sgt = ScreenGuidedTraining()
-        # sgt.run()
+        sgt = ScreenGuidedTraining()
+        sgt.run()
         prepare_model_from_sgt()
-        # visualize_sgt()
-        # prepare_blank_model()
-        # p = sgt.get_hardware_process()
+        p = sgt.get_hardware_process()
     elif config.stage == "fitts":
         fitts = Isofitts()
         fitts.run()
