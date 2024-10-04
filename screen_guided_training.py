@@ -1,7 +1,7 @@
 import libemg
 from utils import setup_live_processing
 from config import Config
-from models import Memory#, MLP
+from models import Memory, MLP
 from PIL import Image
 import numpy as np
 import os
@@ -47,7 +47,7 @@ def load_sgt_data():
         
     offdh = libemg.data_handler.OfflineDataHandler()
     offdh.get_data(dataset_folder, 
-                   [libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2"], "reps"),
+                   [libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2","3","4"], "reps"),
                     libemg.data_handler.RegexFilter("subject", "/",[str(config.subjectID)], "subjects")],
                    metadata_fetchers,
                     ",")
@@ -60,7 +60,7 @@ def offdh_to_memory():
     fe = libemg.feature_extractor.FeatureExtractor()
     features = fe.extract_features(config.features, train_windows, config.feature_dictionary)
     features = torch.hstack([torch.tensor(features[key], dtype=torch.float32) for key in features.keys()])
-    targets = torch.tensor(torch.eye(5)[train_metadata["classes"],:], dtype=torch.float32)
+    targets = torch.tensor(train_metadata["labels"], dtype=torch.float32)
 
     memory = Memory()
     memory.add_memories(experience_data = features,
@@ -71,16 +71,16 @@ def offdh_to_memory():
 
 
 def make_collection_gif(gui):
-    gui.download_gestures([2,3,6,7], config.DC_image_location)
+    gui.download_gestures([4,5], config.DC_image_location)
     pictures = {}
-    gestures = ["Hand_Close", "Hand_Open", "Pronation", "Supination"]
+    gestures = ["Radial_Deviation", "Ulnar_Deviation", "Wrist_Flexion", "Wrist_Extension"]
     for g in gestures:
         pictures[g] = Image.open(f"{config.DC_image_location}{g}.png")
     animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"{config.DC_image_location}collection.mp4",
-                                                        axis_images={"N":pictures["Supination"],
-                                                                    "E":pictures["Hand_Open"],
-                                                                    "S":pictures["Pronation"],
-                                                                    "W":pictures["Hand_Close"]})
+                                                        axis_images={"N":pictures["Radial_Deviation"],
+                                                                    "E":pictures["Wrist_Extension"],
+                                                                    "S":pictures["Ulnar_Deviation"],
+                                                                    "W":pictures["Wrist_Flexion"]})
     coordinates = get_coordinates()
 
     animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
@@ -124,41 +124,11 @@ def prepare_model_from_sgt():
     sgt_memory = offdh_to_memory()
     mdl = MLP(input_shape=config.input_shape)
     mdl.fit(config.DC_epochs, shuffle_every_epoch=True, memory=sgt_memory)
-    # prepare pc thresholds
-    th_min_dic, th_max_dic = mdl.get_pc_thresholds(sgt_memory)
     # install mdl and thresholds to EMGClassifier
-    offline_classifier = libemg.emg_predictor.EMGRegressor()
-    offline_classifier.__setattr__("classifier", mdl)
-    offline_classifier.__setattr__("feature_params", config.feature_dictionary)
+    offline_classifier = libemg.emg_predictor.EMGRegressor(mdl)
+    
+    # offline_classifier.__setattr__("feature_params", config.feature_dictionary)
     # save EMGClassifier to file
     with open(f"{config.DC_data_location}trial_{config.model}/sgt_mdl.pkl", 'wb') as handle:
         pickle.dump(offline_classifier, handle)
 
-# def prepare_blank_model():
-#     # for zero-shot initialization
-#     mdl = MLP(input_shape=config.input_shape)
-#     th_min_dic = {i:config.WENG_SPEED_MIN for i in range(5)}
-#     th_max_dic = {i:config.WENG_SPEED_MAX for i in range(5)}
-#     # install mdl and thresholds to EMGClassifier
-#     offline_classifier = libemg.emg_classifier.EMGClassifier()
-#     offline_classifier.__setattr__("classifier", mdl)
-#     offline_classifier.__setattr__("velocity", True)
-#     offline_classifier.__setattr__("th_min_dic", th_min_dic)
-#     offline_classifier.__setattr__("th_max_dic", th_max_dic)
-#     offline_classifier.__setattr__("velocity_metric_handle", velocity_metric_handle)
-#     offline_classifier.__setattr__("velocity_mapping_handle", velocity_mapping_handle)
-#     offline_classifier.__setattr__("feature_params", config.feature_dictionary)
-#     # save EMGClassifier to file
-#     with open(f"{config.DC_data_location}trial_{config.model}/zs_mdl.pkl", 'wb') as handle:
-#         pickle.dump(offline_classifier, handle)
-
-# import matplotlib.pyplot as plt
-# def visualize_sgt():
-#     offdh = load_sgt_data()
-#     windows, metadata = offdh.parse_windows(config.window_length, config.window_increment)
-#     fe = libemg.feature_extractor.FeatureExtractor()
-#     features = fe.extract_features(config.features, windows, config.feature_dictionary)
-#     fe.visualize_feature_space(features, "PCA",metadata["classes"], render=False)
-#     plt.figure(1)
-#     plt.savefig(f"{config.DC_data_location}trial_{config.model}/sgt_feature_space.png")
-#     plt.close('all')
