@@ -1,5 +1,7 @@
 .vscode/*
 Data/*
+images/*.png
+images/*.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
