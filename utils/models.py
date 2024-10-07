@@ -651,7 +651,7 @@ class MLP(nn.Module):
     def adapt(self, memory):
         self.net.to(self.train_device)
         self.train()
-        self.fit(epochs=self.config.adaptation_epochs, memory=memory)
+        self.fit(memory=memory)
         if self.config.visualize_training:
             self.visualize(memory=memory)
         self.net.to(self.foreground_device)
