@@ -1,11 +1,14 @@
 from pathlib import Path
 import shutil
+import time
+import os
 
 import libemg
 import cv2 as cv
-from numpy import absolute
+import numpy as np
+from PIL import Image
 
-from emg_regression.parsing import get_files
+from models import Memory, MLP
 
 
 def collect_data(online_data_handler, media_folder, data_folder, num_reps):
@@ -91,3 +94,40 @@ class Device:
         self.p = p
         return smi
 
+
+def get_coordinates(steady_state_time=1, ramp_time=1, cycles=3, FPS=24):
+    coordinates = []
+    for c in range(cycles):
+        # A cycle is like:
+
+        coordinates.append(np.zeros(steady_state_time*FPS)) # steady state (0)
+        
+        coordinates.append(np.linspace(0, 1,FPS*ramp_time))  # ramp up (+1)
+        coordinates.append(np.ones(FPS*steady_state_time))   # steady state (+1)
+        coordinates.append(np.linspace(1, 0, FPS*ramp_time)) # ramp down (+1)
+        
+        coordinates.append(np.linspace(0, -1, ramp_time*FPS))# ramp up (-1)
+        coordinates.append(-1*np.ones(FPS*steady_state_time))# steady state (-1)
+        coordinates.append(np.linspace(-1, 0, FPS*ramp_time)) # ramp down (-1)
+
+        coordinates.append(np.zeros(steady_state_time*FPS)) # steady state (0)
+
+        coordinates.append(np.linspace(0, -1, ramp_time*FPS))# ramp up (-1)
+        coordinates.append(-1*np.ones(FPS*steady_state_time))# steady state (-1)
+        coordinates.append(np.linspace(-1, 0, FPS*ramp_time)) # ramp down (-1)
+
+        coordinates.append(np.linspace(0, 1,FPS*ramp_time))  # ramp up (+1)
+        coordinates.append(np.ones(FPS*steady_state_time))   # steady state (+1)
+        coordinates.append(np.linspace(1, 0, FPS*ramp_time)) # ramp down (+1)
+
+    coordinates = np.concatenate(coordinates)
+    dof1 = np.vstack((coordinates, np.zeros_like(coordinates))).T
+    dof2 = np.vstack((np.zeros_like(coordinates), coordinates)).T
+    final_coordinates = np.vstack((dof1, dof2)) 
+    return final_coordinates
+
+def cleanup_hardware(p):
+    print("Performing clean-up...")
+    p.signal.set()
+    time.sleep(3)
+    print("Clean-up finished.")
