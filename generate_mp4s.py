@@ -9,7 +9,7 @@ def make_collection_ABADWFWE_gif():
     pictures = {}
     for g in gestures:
         pictures[g] = Image.open(f"images/{g}.png")
-    animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"images/collection.mp4",
+    animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"images/abduct-aduct-flexion-extension/collection.mp4",
                                                         axis_images={"N":pictures["Radial_Deviation"],
                                                                     "E":pictures["Wrist_Extension"],
                                                                     "S":pictures["Ulnar_Deviation"],
@@ -23,7 +23,7 @@ def make_collection_HOHCWPWS_gif():
     pictures = {}
     for g in gestures:
         pictures[g] = Image.open(f"images/{g}.png")
-    animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"images/collection.mp4",
+    animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"images/close-pro-open-sup/collection.mp4",
                                                         axis_images={"N":pictures["Supination"],
                                                                     "E":pictures["Hand_Open"],
                                                                     "S":pictures["Pronation"],
