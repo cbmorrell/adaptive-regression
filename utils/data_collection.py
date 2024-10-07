@@ -60,25 +60,30 @@ class Device:
             name = 'myo'
             fs = 200
             streamer = libemg.streamers.myo_streamer
+            num_channels = 8
         elif 'emager' in device:
             name = 'emager'
             fs = 1010
             streamer = libemg.streamers.emager_streamer
+            num_channels = 64
         elif 'oymotion' in device:
             # fs = 1000   # analyze_hardware says it isn't sampling fast enough (670 Hz)...
             name = 'oymotion'
             fs = 670
             streamer = libemg.streamers.oymotion_streamer
+            num_channels = 8
         elif 'sifi' in device:
             name = 'sifi'
             fs = 1500
             streamer = lambda: libemg.streamers.sifi_bioarmband_streamer(ecg=False, eda=False, imu=False, ppg=False)
+            num_channels = 8
         else:
             raise ValueError(f"Unexpected value for device. Got: {device}.")
 
         self.name = name
         self.fs = fs
         self.streamer = streamer
+        self.num_channels = num_channels
         self.p = None
 
     def stream(self):
