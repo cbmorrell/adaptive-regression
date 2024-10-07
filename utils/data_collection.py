@@ -79,8 +79,10 @@ class Device:
         self.name = name
         self.fs = fs
         self.streamer = streamer
+        self.p = None
 
     def stream(self):
-        _, smi = self.streamer()
+        p, smi = self.streamer()
+        self.p = p
         return smi
 
