@@ -8,7 +8,7 @@ import cv2 as cv
 import numpy as np
 from PIL import Image
 
-from models import Memory, MLP
+from utils.models import Memory, MLP
 
 
 def collect_data(online_data_handler, media_folder, data_folder, num_reps):
@@ -25,14 +25,14 @@ def collect_data(online_data_handler, media_folder, data_folder, num_reps):
                 return
     
     # Calculate rep time from video (maybe add this to libemg?)
-    media_file = Path(media_folder, 'animation.mp4').absolute()
+    media_file = Path(media_folder, 'collection.mp4').absolute()
     assert media_file.exists(), f"Media file {media_file} does not exist."
     video = cv.VideoCapture(media_file.as_posix())
     fps = 24
     rep_time = video.get(cv.CAP_PROP_FRAME_COUNT) / fps
     
     # Copy labels file to data directory
-    labels_file = Path(media_folder, 'animation.txt').absolute().as_posix()
+    labels_file = Path(media_folder, 'collection.txt').absolute().as_posix()
     shutil.copy(labels_file, Path(data_folder, 'labels.txt').absolute().as_posix())
     
     # Create GUI
@@ -95,36 +95,7 @@ class Device:
         return smi
 
 
-def get_coordinates(steady_state_time=1, ramp_time=1, cycles=3, FPS=24):
-    coordinates = []
-    for c in range(cycles):
-        # A cycle is like:
 
-        coordinates.append(np.zeros(steady_state_time*FPS)) # steady state (0)
-        
-        coordinates.append(np.linspace(0, 1,FPS*ramp_time))  # ramp up (+1)
-        coordinates.append(np.ones(FPS*steady_state_time))   # steady state (+1)
-        coordinates.append(np.linspace(1, 0, FPS*ramp_time)) # ramp down (+1)
-        
-        coordinates.append(np.linspace(0, -1, ramp_time*FPS))# ramp up (-1)
-        coordinates.append(-1*np.ones(FPS*steady_state_time))# steady state (-1)
-        coordinates.append(np.linspace(-1, 0, FPS*ramp_time)) # ramp down (-1)
-
-        coordinates.append(np.zeros(steady_state_time*FPS)) # steady state (0)
-
-        coordinates.append(np.linspace(0, -1, ramp_time*FPS))# ramp up (-1)
-        coordinates.append(-1*np.ones(FPS*steady_state_time))# steady state (-1)
-        coordinates.append(np.linspace(-1, 0, FPS*ramp_time)) # ramp down (-1)
-
-        coordinates.append(np.linspace(0, 1,FPS*ramp_time))  # ramp up (+1)
-        coordinates.append(np.ones(FPS*steady_state_time))   # steady state (+1)
-        coordinates.append(np.linspace(1, 0, FPS*ramp_time)) # ramp down (+1)
-
-    coordinates = np.concatenate(coordinates)
-    dof1 = np.vstack((coordinates, np.zeros_like(coordinates))).T
-    dof2 = np.vstack((np.zeros_like(coordinates), coordinates)).T
-    final_coordinates = np.vstack((dof1, dof2)) 
-    return final_coordinates
 
 def cleanup_hardware(p):
     print("Performing clean-up...")
