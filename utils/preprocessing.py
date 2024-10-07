@@ -8,7 +8,7 @@ from sklearn.pipeline import Pipeline
 import torch
 from torch.utils.data import Dataset
 
-from emg_regression.parsing import write_pickle
+# from emg_regression.parsing import write_pickle # missing from files
 
 
 class DataPreparationPipeline:
@@ -128,7 +128,9 @@ class DataPreparationPipeline:
         return inputs, labels
 
     def save(self, filename):
-        write_pickle(self, filename)
+        assert 1 == 1
+        
+        # write_pickle(self, filename)
 
 
 def transpose_windows(windows):
