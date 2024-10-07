@@ -4,9 +4,9 @@ from pathlib import Path
 import libemg
 import numpy as np
 
-from emg_regression.data_collection import collect_data, Device
+from utils.data_collection import collect_data, Device
 
-
+# -> python stream.py sifi collect Data/subject1000/ images/ [abduct-adduct-flexion-extension] 5
 def main():
     # CLI arguments
     parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.')
