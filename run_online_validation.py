@@ -13,7 +13,6 @@ def main():
     parser = ArgumentParser(description='Run regression model online.')
     parser.add_argument('model', type=str, choices=('svm', 'linear'), help='Model type.')
     parser.add_argument('data_directory', type=str, help='Relative path to data directory (including subject #).')
-    parser.add_argument('--skip_analyze', action='store_true', help='Flag to skip analyzing the online predictor.')
 
     subparsers = parser.add_subparsers(description='Validation method.', dest='validation', required=True, help='Validation types.')
     fitts_parser = subparsers.add_parser('fitts')
@@ -74,8 +73,6 @@ def main():
     offline_regressor = libemg.emg_predictor.EMGRegressor(model)
     online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size, window_inc, online_data_handler, feature_list, std_out=False, smm=False)
     online_regressor.run(block=False)
-    if not args.skip_analyze:
-        online_regressor.analyze_predictor()
 
     if args.validation == 'fitts':
         fitts = FittsLawTest(num_circles=args.num_circles, num_trials=args.num_trials, savefile=Path(data_directory, 'fitts.pkl').absolute().as_posix())
