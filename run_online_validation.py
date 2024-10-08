@@ -9,8 +9,11 @@ from sklearn.linear_model import LinearRegression
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.svm import SVR
 
+from utils.data_collection import Device
+
 def main():
     parser = ArgumentParser(description='Run regression model online.')
+    parser.add_argument('device', type=str, choices=('emager', 'myo', 'sifi', 'oymotion'), help='EMG device to stream.')
     parser.add_argument('model', type=str, choices=('svm', 'linear'), help='Model type.')
     parser.add_argument('data_directory', type=str, help='Relative path to data directory (including subject #).')
 
@@ -36,24 +39,16 @@ def main():
     data_directory = Path(args.data_directory).absolute().as_posix()
     odh.get_data(data_directory, regex_filters, metadata_fetchers)
 
-    if odh.data[0].shape[1] == 8:
-        # Assume myo data
-        fs = 200
-        window_size = 40
-        window_inc = 10
-        _, smi = libemg.streamers.myo_streamer()
-    else:
-        # Assume EMaGer data
-        fs = 1010
-        window_size = 150
-        window_inc = 40
-        _, smi = libemg.streamers.emager_streamer()
-
-    fi = libemg.filtering.Filter(fs)
+    device = Device(args.device)
+    fi = libemg.filtering.Filter(device.fs)
     fi.install_common_filters()
     fi.filter(odh)
 
-    windows, metadata = odh.parse_windows(window_size, window_inc, metadata_operations=dict(labels=lambda x: x[-1]))
+    window_size_ms = 150
+    window_inc_ms = 40
+    window_size_samples = device.fs * window_size_ms / 1000
+    window_inc_samples = device.fs * window_inc_ms / 1000
+    windows, metadata = odh.parse_windows(window_size_samples, window_inc_samples, metadata_operations=dict(labels=lambda x: x[-1]))
     fe = libemg.feature_extractor.FeatureExtractor()
     feature_list = fe.get_feature_groups()['HTD']
     features = fe.extract_features(feature_list, windows, array=True)
@@ -67,11 +62,12 @@ def main():
         raise ValueError(f"Unexpected value for model. Got: {args.model}.")
     model.fit(features, labels)
 
+    smi = device.stream()
     online_data_handler = libemg.data_handler.OnlineDataHandler(smi)
     online_data_handler.install_filter(fi)
 
     offline_regressor = libemg.emg_predictor.EMGRegressor(model)
-    online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size, window_inc, online_data_handler, feature_list, std_out=False, smm=False)
+    online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size_samples, window_inc_samples, online_data_handler, feature_list, std_out=False, smm=False)
     online_regressor.run(block=False)
 
     if args.validation == 'fitts':
