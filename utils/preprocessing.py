@@ -1,4 +1,5 @@
 from copy import deepcopy
+import pickle
 
 import libemg
 import numpy as np
@@ -128,9 +129,8 @@ class DataPreparationPipeline:
         return inputs, labels
 
     def save(self, filename):
-        assert 1 == 1
-        
-        # write_pickle(self, filename)
+        with open(filename, 'wb') as f:
+            pickle.dump(self, f)
 
 
 def transpose_windows(windows):
