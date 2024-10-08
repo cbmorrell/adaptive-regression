@@ -1,13 +1,13 @@
 from pathlib import Path
 from argparse import ArgumentParser
 
-from libemg.data_handler import RegexFilter, FilePackager
 import libemg
+from libemg.data_handler import RegexFilter, FilePackager
+from libemg.environments.isofitts import IsoFitts
+from libemg.environments.controllers import RegressorController
 from sklearn.linear_model import LinearRegression
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.svm import SVR
-
-from emg_regression.fitts import FittsLawTest
 
 def main():
     parser = ArgumentParser(description='Run regression model online.')
@@ -75,7 +75,9 @@ def main():
     online_regressor.run(block=False)
 
     if args.validation == 'fitts':
-        fitts = FittsLawTest(num_circles=args.num_circles, num_trials=args.num_trials, savefile=Path(data_directory, 'fitts.pkl').absolute().as_posix())
+        controller = RegressorController()
+        prediction_map = None
+        fitts = IsoFitts(controller, num_circles=args.num_circles, num_trials=args.num_trials, save_file=Path(data_directory, 'fitts.pkl').absolute().as_posix(), prediction_map=prediction_map)
         fitts.run()
     elif args.validation == 'visualize':
         online_regressor.visualize(legend=True)
