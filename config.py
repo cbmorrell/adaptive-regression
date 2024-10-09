@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import libemg
 import numpy as np
 import os
@@ -6,14 +8,16 @@ import torch
 from PIL import Image
 
 from utils.models import Memory, MLP
-from utils.data_collection import get_coordinates, Device
+from utils.data_collection import Device
 
 class Config:
-    def __init__(self):
+    def __init__(self, subject_id: str, model: int, stage: str):
         # usb towards the hand
-        self.subjectID = 1000
-        self.model = 1 # 1: sgt, 2: sgt-ciil
-        self.stage = "fitts" #sgt, 
+        assert model in [1, 2], f"Unexpected value for model. Got: {model}."
+        assert stage in ['sgt', 'fitts'], f"Unexpected value for stage. Got: {stage}."
+        self.subjectID = subject_id
+        self.model = model # 1: sgt, 2: sgt-ciil
+        self.stage = stage  #sgt, fitts
         self.device = Device('sifi')
 
         self.get_device_parameters()
@@ -21,17 +25,6 @@ class Config:
         self.get_datacollection_parameters()
         self.get_classifier_parameters()
         self.get_training_hyperparameters()
-
-    def setup_folders(self):
-        if not os.path.exists("data"):
-            os.mkdir("data")
-        if not os.path.exists(f"data/subject{self.subjectID}"):
-            os.mkdir(         f"data/subject{self.subjectID}")
-        if not os.path.exists(f"data/subject{self.subjectID}/{self.stage}"):
-            os.mkdir(         f"data/subject{self.subjectID}/{self.stage}")
-        if not os.path.exists(f"data/subject{self.subjectID}/{self.stage}/trial_{self.model}"):
-            os.mkdir(         f"data/subject{self.subjectID}/{self.stage}/trial_{self.model}")
-
 
     def get_device_parameters(self):
         if self.device.name == "sifi":
@@ -44,6 +37,7 @@ class Config:
             self.log_to_file = False
         else:
             self.log_to_file = True
+
     def get_classifier_parameters(self):
         self.oc_output_format = "probabilities"
         self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, class prediction, confidence
@@ -99,17 +93,17 @@ class Config:
     def get_game_parameters(self):
         self.game_time = 600
 
-
-    def setup_classifier(self, odh, save_dir, smi):
+    def setup_model(self, odh, save_dir, smi):
         if self.stage == "fitts":
             model_to_load = f"Data/subject{self.subjectID}/sgt/trial_{self.model}/sgt_mdl.pkl"
+        else:
+            raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
         with open(model_to_load, 'rb') as handle:
             loaded_mdl = pickle.load(handle)
 
     
         # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
         feature_list = self.features
-
 
         if smi is None:
             smm = False
@@ -158,22 +152,6 @@ class Config:
         memory.shuffle()
         return memory
 
-
-    def make_collection_gif(self, gui):
-        gui.download_gestures([4,5], self.DC_image_location)
-        pictures = {}
-        gestures = ["Radial_Deviation", "Ulnar_Deviation", "Wrist_Flexion", "Wrist_Extension"]
-        for g in gestures:
-            pictures[g] = Image.open(f"{self.DC_image_location}{g}.png")
-        animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"{self.DC_image_location}collection.mp4",
-                                                            axis_images={"N":pictures["Radial_Deviation"],
-                                                                        "E":pictures["Wrist_Extension"],
-                                                                        "S":pictures["Ulnar_Deviation"],
-                                                                        "W":pictures["Wrist_Flexion"]})
-        coordinates = get_coordinates()
-
-        animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
-
     def prepare_model_from_sgt(self):
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
@@ -195,7 +173,6 @@ class Config:
         
         return odh, smi
 
-
     def make_sgt(self):
         odh, smi = self.setup_live_processing()
         args = {
@@ -213,6 +190,6 @@ class Config:
             args=args, debug=False)
 
         if not os.path.exists(f"{self.DC_image_location}collection.mp4"):
-            self.make_collection_gif(gui)
+            raise FileNotFoundError("Couldn't find collection.mp4 file. Please generate training animation.")
         
         return gui
