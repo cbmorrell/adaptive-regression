@@ -7,8 +7,10 @@ from sklearn.linear_model import LinearRegression
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.svm import SVR
 
-from emg_regression.fitts import FittsLawTest
+from libemg.environments.isofitts import IsoFitts
+from libemg.environments.controllers import RegressorController
 
+# -> python run_online_validation.py linear Data/subject1000 fitts/visualize
 def main():
     parser = ArgumentParser(description='Run regression model online.')
     parser.add_argument('model', type=str, choices=('svm', 'linear'), help='Model type.')
@@ -24,10 +26,11 @@ def main():
     print(args)
 
     subject = args.data_directory.split('/')[-1]
+    print(subject)
     odh = libemg.data_handler.OfflineDataHandler()
     regex_filters = (
         RegexFilter(left_bound='/', right_bound='/', values=[subject], description='subject'),
-        RegexFilter(left_bound='/', right_bound='/', values=['open-close', 'pro-sup'], description='movement'),
+        RegexFilter(left_bound='/', right_bound='/', values=['open-close', 'pro-sup', 'abduct-adduct-flexion-extension'], description='movement'),
         RegexFilter(left_bound='C_0_R_', right_bound='_emg.csv', values=[str(idx) for idx in range(5)], description='reps')
     )
     package_function = lambda x, y: Path(x).parent.absolute().as_posix() == Path(y).parent.absolute().as_posix()
@@ -37,12 +40,17 @@ def main():
     data_directory = Path(args.data_directory).absolute().as_posix()
     odh.get_data(data_directory, regex_filters, metadata_fetchers)
 
+
     if odh.data[0].shape[1] == 8:
         # Assume myo data
-        fs = 200
-        window_size = 40
-        window_inc = 10
-        _, smi = libemg.streamers.myo_streamer()
+        fs = 1500
+        window_size = 200
+        window_inc = 50
+        _, smi = libemg.streamers.sifi_bioarmband_streamer(name="BioPoint_v1_1",
+                                                           ppg=False,
+                                                           eda=False,
+                                                           imu=False,
+                                                           ecg=False)
     else:
         # Assume EMaGer data
         fs = 1010
@@ -72,14 +80,18 @@ def main():
     online_data_handler.install_filter(fi)
 
     offline_regressor = libemg.emg_predictor.EMGRegressor(model)
-    online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size, window_inc, online_data_handler, feature_list, std_out=False, smm=False)
+    offline_regressor.add_deadband(0.2)
+    online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size, window_inc, online_data_handler, feature_list, std_out=True, smm=False)
     online_regressor.run(block=False)
-    if not args.skip_analyze:
-        online_regressor.analyze_predictor()
+    # if not args.skip_analyze:
+    #     online_regressor.analyze_predictor()
 
     if args.validation == 'fitts':
-        fitts = FittsLawTest(num_circles=args.num_circles, num_trials=args.num_trials, savefile=Path(data_directory, 'fitts.pkl').absolute().as_posix())
+        controller = RegressorController()
+        controller.start()
+        fitts = IsoFitts(controller=controller, num_circles=args.num_circles, num_trials=args.num_trials, save_file=Path(data_directory, 'fitts.pkl').absolute().as_posix())
         fitts.run()
+        pass
     elif args.validation == 'visualize':
         online_regressor.visualize(legend=True)
     else:
