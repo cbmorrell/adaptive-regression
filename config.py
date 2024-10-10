@@ -11,13 +11,14 @@ from utils.adaptation import Memory
 from utils.data_collection import Device, collect_data
 
 class Config:
-    def __init__(self, subject_id: str, model: str, stage: str):
+    def __init__(self, subject_id: str, model: str, stage: str, device: str):
         # usb towards the hand
         self.subject_id = subject_id
         self.model = model
         self.stage = stage
-        self.device = Device('sifi')
-        self.odh = None
+        self.device = Device(device)
+        self.fi = libemg.filtering.Filter(self.device.fs)
+        self.fi.install_common_filters()
 
         self.get_device_parameters()
         self.get_feature_parameters()
@@ -83,11 +84,11 @@ class Config:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
-        self.DC_image_location = "images/"
-        self.DC_data_location = Path('data', 'subject', self.subject_id, 'sgt').absolute().as_posix()
+        self.DC_image_location = "images/close-pro-open-sup/"
+        self.DC_data_location = Path('data', self.subject_id, self.model).absolute().as_posix()
         self.DC_reps           = 5
         self.DC_epochs         = 150
-        self.DC_model_file = Path(self.DC_data_location, f"trial_{self.model}", 'sgt_mdl.pkl').absolute().as_posix()
+        self.DC_model_file = Path(self.DC_data_location, 'sgt_mdl.pkl').absolute().as_posix()
 
     def get_training_hyperparameters(self):
         self.batch_size = 64
@@ -98,7 +99,7 @@ class Config:
     def get_game_parameters(self):
         self.game_time = 600
 
-    def setup_model(self):
+    def setup_model(self, online_data_handler):
         if self.stage != 'fitts':
             raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
 
@@ -121,7 +122,7 @@ class Config:
         model = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
                                                                 window_size=self.window_length,
                                                                 window_increment=self.window_increment,
-                                                                online_data_handler=self.odh,
+                                                                online_data_handler=online_data_handler,
                                                                 features=feature_list,
                                                                 file_path=Path(self.DC_model_file).parent.as_posix(),
                                                                 file=True,
@@ -136,19 +137,22 @@ class Config:
         # parse offline data into an offline data handler
         dataset_folder = f'./'
         package_function = lambda x, y: True
-        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter("images/", ".txt", ["collection"], "labels"), package_function)]
+        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter(self.DC_image_location, ".txt", ["collection"], "labels"), package_function)]
             
         offdh = libemg.data_handler.OfflineDataHandler()
-        offdh.get_data(dataset_folder, 
-                    [libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2","3","4"], "reps"),
-                        libemg.data_handler.RegexFilter("subject", "/",[str(self.subject_id)], "subjects")],
-                    metadata_fetchers,
-                        ",")
+        regex_filters = [
+            libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2","3","4"], "reps"),
+            libemg.data_handler.RegexFilter("/", "/",[str(self.subject_id)], "subjects"),
+            libemg.data_handler.RegexFilter('/', '/', [self.model], 'model_data')
+        ]
+        offdh.get_data(dataset_folder, regex_filters, metadata_fetchers, ",")
         return offdh
 
     def offdh_to_memory(self):
         offdh = self.load_sgt_data()
-        train_windows, train_metadata = offdh.parse_windows(self.window_length, self.window_increment,metadata_operations={"labels": "last_sample"})
+        self.fi.filter(offdh)   # always apply filter to offline data
+
+        train_windows, train_metadata = offdh.parse_windows(self.window_length, self.window_increment, metadata_operations={"labels": "last_sample"})
         fe = libemg.feature_extractor.FeatureExtractor()
         features = fe.extract_features(self.features, train_windows, self.feature_dictionary)
         features = torch.hstack([torch.tensor(features[key], dtype=torch.float32) for key in features.keys()])
@@ -165,29 +169,25 @@ class Config:
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
         mdl = MLP(self)
+        print('Fitting model...')
         mdl.fit(shuffle_every_epoch=True, memory=sgt_memory)
         # install mdl and thresholds to EMGClassifier
-        offline_classifier = libemg.emg_predictor.EMGRegressor(mdl)
+        offline_regressor = libemg.emg_predictor.EMGRegressor(mdl)
         
         # offline_classifier.__setattr__("feature_params", config.feature_dictionary)
         # save EMGClassifier to file
         with open(self.DC_model_file, 'wb') as handle:
-            pickle.dump(offline_classifier, handle)
+            pickle.dump(offline_regressor, handle)
 
     def setup_live_processing(self):
-        if self.odh is not None:
-            return self.odh
-
         smi = self.device.stream()
-        self.odh = libemg.data_handler.OnlineDataHandler(shared_memory_items=smi)
+        odh = libemg.data_handler.OnlineDataHandler(shared_memory_items=smi)    # can't make this a field b/c pickling will throw an error
+        if self.stage != 'sgt':
+            # Only want raw data during SGT
+            odh.install_filter(self.fi)
         if self.log_to_file:
-            self.odh.log_to_file()
-        return self.odh
+            odh.log_to_file(file_path=self.DC_data_location + '/')
+        return odh
 
-    def make_sgt(self):
-        self.setup_live_processing()
-
-        if not os.path.exists(f"{self.DC_image_location}collection.mp4"):
-            raise FileNotFoundError("Couldn't find collection.mp4 file. Please generate training animation.")
-        
-        collect_data(self.odh, self.DC_image_location, f"{self.DC_data_location}trial_{self.model}/", self.DC_reps)
+    def start_sgt(self, online_data_handler):
+        collect_data(online_data_handler, self.DC_image_location, self.DC_data_location, self.DC_reps)
