@@ -11,13 +11,11 @@ from utils.models import Memory, MLP
 from utils.data_collection import Device
 
 class Config:
-    def __init__(self, subject_id: str, model: int, stage: str):
+    def __init__(self, subject_id: str, model: str, stage: str):
         # usb towards the hand
-        assert model in [1, 2], f"Unexpected value for model. Got: {model}."
-        assert stage in ['sgt', 'fitts'], f"Unexpected value for stage. Got: {stage}."
         self.subjectID = subject_id
-        self.model = model # 1: sgt, 2: sgt-ciil
-        self.stage = stage  #sgt, fitts
+        self.model = model
+        self.stage = stage
         self.device = Device('sifi')
 
         self.get_device_parameters()
@@ -34,6 +32,7 @@ class Config:
         self.window_length = int((self.window_length_s*self.device.fs)/1000)
         self.window_increment = int((self.window_increment_s*self.device.fs)/1000)
         if self.stage == "sgt":
+            # Do we want to log during user learning phase too????
             self.log_to_file = False
         else:
             self.log_to_file = True
@@ -45,7 +44,7 @@ class Config:
                                     ["adapt_flag", (1,1), np.int32],
                                     ["active_flag", (1,1), np.int8]]
 
-        if self.model == 1: # baseline sgt no adaptation
+        if self.model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
             self.model_name       = "MLP"
             self.negative_method  = "mixed"
             self.loss_function    = "MSELoss"
@@ -53,7 +52,7 @@ class Config:
             self.initialization   = "SGT"
             self.adaptation       = False
             self.adapt_PCs        = False
-        elif self.model == 2: # sgt adaptation
+        elif self.model in ['within-ciil', 'combined-ciil']: # sgt adaptation
             self.model_name       = "MLP"
             self.negative_method  = "mixed"
             self.loss_function    = "MSELoss"
@@ -61,6 +60,8 @@ class Config:
             self.initialization   = "SGT"
             self.adaptation       = True
             self.adapt_PCs        = True
+        else:
+            raise ValueError(f"Unexpected value for self.model. Got: {self.model}.")
         self.WENG_SPEED_MIN = -20
         self.WENG_SPEED_MAX = -13
         self.lower_PC_percentile = 0.1
