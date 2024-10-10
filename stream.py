@@ -7,7 +7,7 @@ import numpy as np
 
 from config import Config
 
-# -> python stream.py sifi collect Data/subject1000/ images/ [abduct-adduct-flexion-extension] 5
+# -> python stream.py sifi collect Data/subject1000/ images/ abduct-adduct-flexion-extension 5
 def main():
     # CLI arguments
     parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.', usage='python main.py sifi data/subject1000 sgt images')

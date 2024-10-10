@@ -51,8 +51,8 @@ def main():
 
     window_size_ms = 150
     window_inc_ms = 40
-    window_size_samples = device.fs * window_size_ms / 1000
-    window_inc_samples = device.fs * window_inc_ms / 1000
+    window_size_samples = int(device.fs * window_size_ms / 1000)
+    window_inc_samples = int(device.fs * window_inc_ms / 1000)
     windows, metadata = odh.parse_windows(window_size_samples, window_inc_samples, metadata_operations=dict(labels=lambda x: x[-1]))
     fe = libemg.feature_extractor.FeatureExtractor()
     feature_list = fe.get_feature_groups()['HTD']
