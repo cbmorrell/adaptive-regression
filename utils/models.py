@@ -479,7 +479,7 @@ class MLP(nn.Module):
         return self.net(x)
     
     def predict(self, data):
-        self.predict_proba(data)
+        return self.predict_proba(data)
         # probs = self.predict_proba(data)
         # return np.array([np.where(p==np.max(p))[0][0] for p in probs])
 
