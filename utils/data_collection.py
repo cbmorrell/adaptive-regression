@@ -85,11 +85,9 @@ class Device:
         self.fs = fs
         self.streamer = streamer
         self.num_channels = num_channels
-        self.p = None
 
     def stream(self):
         p, smi = self.streamer()
-        self.p = p
         return smi
 
 
