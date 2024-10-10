@@ -9,12 +9,13 @@ def make_collection_ABADWFWE_gif():
     pictures = {}
     for g in gestures:
         pictures[g] = Image.open(f"images/{g}.png")
-    animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"images/abduct-aduct-flexion-extension/collection.mp4",
+    animator = libemg.animator.ScatterPlotAnimator(output_filepath=f"images/abduct-adduct-flexion-extension/collection.mp4",
                                                         axis_images={"N":pictures["Radial_Deviation"],
                                                                     "E":pictures["Wrist_Extension"],
                                                                     "S":pictures["Ulnar_Deviation"],
                                                                     "W":pictures["Wrist_Flexion"]},
-                                                    show_direction=True)
+                                                    show_direction=True,
+                                                    show_countdown=True)
     coordinates = get_coordinates()
     animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
 
@@ -28,7 +29,8 @@ def make_collection_HOHCWPWS_gif():
                                                                     "E":pictures["Hand_Open"],
                                                                     "S":pictures["Pronation"],
                                                                     "W":pictures["Hand_Close"]},
-                                                    show_direction=True)
+                                                    show_direction=True,
+                                                    show_countdown=True)
     coordinates = get_coordinates()
     animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
     
@@ -48,5 +50,5 @@ def get_coordinates(period=2, cycles=10, rest_time=5, FPS=24):
     return final_coordinates
 
 if __name__ == "__main__":
-    # make_collection_ABADWFWE_gif()
+    make_collection_ABADWFWE_gif()
     make_collection_HOHCWPWS_gif()
