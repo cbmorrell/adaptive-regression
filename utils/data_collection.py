@@ -8,8 +8,6 @@ import cv2 as cv
 import numpy as np
 from PIL import Image
 
-from utils.models import Memory, MLP
-
 
 def collect_data(online_data_handler, media_folder, data_folder, num_reps):
     try:
