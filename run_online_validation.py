@@ -1,8 +1,10 @@
 from pathlib import Path
 from argparse import ArgumentParser
 
-from libemg.data_handler import RegexFilter, FilePackager
 import libemg
+from libemg.data_handler import RegexFilter, FilePackager
+from libemg.environments.isofitts import IsoFitts
+from libemg.environments.controllers import RegressorController
 from sklearn.linear_model import LinearRegression
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.svm import SVR
@@ -10,12 +12,14 @@ from sklearn.svm import SVR
 from libemg.environments.isofitts import IsoFitts
 from libemg.environments.controllers import RegressorController
 
+from utils.data_collection import Device
+
 # -> python run_online_validation.py linear Data/subject1000 fitts/visualize
 def main():
     parser = ArgumentParser(description='Run regression model online.')
+    parser.add_argument('device', type=str, choices=('emager', 'myo', 'sifi', 'oymotion'), help='EMG device to stream.')
     parser.add_argument('model', type=str, choices=('svm', 'linear'), help='Model type.')
     parser.add_argument('data_directory', type=str, help='Relative path to data directory (including subject #).')
-    parser.add_argument('--skip_analyze', action='store_true', help='Flag to skip analyzing the online predictor.')
 
     subparsers = parser.add_subparsers(description='Validation method.', dest='validation', required=True, help='Validation types.')
     fitts_parser = subparsers.add_parser('fitts')
@@ -40,29 +44,16 @@ def main():
     data_directory = Path(args.data_directory).absolute().as_posix()
     odh.get_data(data_directory, regex_filters, metadata_fetchers)
 
-
-    if odh.data[0].shape[1] == 8:
-        # Assume myo data
-        fs = 1500
-        window_size = 200
-        window_inc = 50
-        _, smi = libemg.streamers.sifi_bioarmband_streamer(name="BioPoint_v1_1",
-                                                           ppg=False,
-                                                           eda=False,
-                                                           imu=False,
-                                                           ecg=False)
-    else:
-        # Assume EMaGer data
-        fs = 1010
-        window_size = 150
-        window_inc = 40
-        _, smi = libemg.streamers.emager_streamer()
-
-    fi = libemg.filtering.Filter(fs)
+    device = Device(args.device)
+    fi = libemg.filtering.Filter(device.fs)
     fi.install_common_filters()
     fi.filter(odh)
 
-    windows, metadata = odh.parse_windows(window_size, window_inc, metadata_operations=dict(labels=lambda x: x[-1]))
+    window_size_ms = 150
+    window_inc_ms = 40
+    window_size_samples = device.fs * window_size_ms / 1000
+    window_inc_samples = device.fs * window_inc_ms / 1000
+    windows, metadata = odh.parse_windows(window_size_samples, window_inc_samples, metadata_operations=dict(labels=lambda x: x[-1]))
     fe = libemg.feature_extractor.FeatureExtractor()
     feature_list = fe.get_feature_groups()['HTD']
     features = fe.extract_features(feature_list, windows, array=True)
@@ -76,20 +67,18 @@ def main():
         raise ValueError(f"Unexpected value for model. Got: {args.model}.")
     model.fit(features, labels)
 
+    smi = device.stream()
     online_data_handler = libemg.data_handler.OnlineDataHandler(smi)
     online_data_handler.install_filter(fi)
 
     offline_regressor = libemg.emg_predictor.EMGRegressor(model)
-    offline_regressor.add_deadband(0.2)
-    online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size, window_inc, online_data_handler, feature_list, std_out=True, smm=False)
+    online_regressor = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor, window_size_samples, window_inc_samples, online_data_handler, feature_list, std_out=False, smm=False)
     online_regressor.run(block=False)
-    # if not args.skip_analyze:
-    #     online_regressor.analyze_predictor()
 
     if args.validation == 'fitts':
         controller = RegressorController()
-        controller.start()
-        fitts = IsoFitts(controller=controller, num_circles=args.num_circles, num_trials=args.num_trials, save_file=Path(data_directory, 'fitts.pkl').absolute().as_posix())
+        prediction_map = None
+        fitts = IsoFitts(controller, num_circles=args.num_circles, num_trials=args.num_trials, save_file=Path(data_directory, 'fitts.pkl').absolute().as_posix(), prediction_map=prediction_map)
         fitts.run()
         pass
     elif args.validation == 'visualize':

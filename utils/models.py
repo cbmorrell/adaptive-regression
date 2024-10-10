@@ -266,28 +266,28 @@ class ContrastiveModel(nn.Module):
         return predictions
 
 
-class MLP(nn.Module):
-    def __init__(self, num_input_channels: int, hidden_channels: Sequence[int], last_layer_activation: bool = False):
-        # torchvision has this as a nn.Sequential, but this makes every field something it tries to iterate through
-        super().__init__()
-        self.input_size = num_input_channels
-        layers = []
-        in_dim = num_input_channels
-        for hidden_dim in hidden_channels[:-1]:
-            layers.append(nn.Linear(in_dim, hidden_dim))
-            layers.append(nn.ReLU())
-            in_dim = hidden_dim
+# class MLP(nn.Module):
+#     def __init__(self, num_input_channels: int, hidden_channels: Sequence[int], last_layer_activation: bool = False):
+#         # torchvision has this as a nn.Sequential, but this makes every field something it tries to iterate through
+#         super().__init__()
+#         self.input_size = num_input_channels
+#         layers = []
+#         in_dim = num_input_channels
+#         for hidden_dim in hidden_channels[:-1]:
+#             layers.append(nn.Linear(in_dim, hidden_dim))
+#             layers.append(nn.ReLU())
+#             in_dim = hidden_dim
 
-        # Add final layer separately because it may not have an activation layer
-        layers.append(nn.Linear(in_dim, hidden_channels[-1]))
-        if last_layer_activation:
-            layers.append(nn.ReLU())
-        self.layers = nn.ModuleList(layers)
+#         # Add final layer separately because it may not have an activation layer
+#         layers.append(nn.Linear(in_dim, hidden_channels[-1]))
+#         if last_layer_activation:
+#             layers.append(nn.ReLU())
+#         self.layers = nn.ModuleList(layers)
 
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
+#     def forward(self, x):
+#         for layer in self.layers:
+#             x = layer(x)
+#         return x
 
 
 class ProjectionNetwork(nn.Module):
