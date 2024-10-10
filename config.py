@@ -5,18 +5,19 @@ import numpy as np
 import os
 import pickle
 import torch
-from PIL import Image
 
-from utils.models import Memory, MLP
-from utils.data_collection import Device
+from utils.models import MLP
+from utils.adaptation import Memory
+from utils.data_collection import Device, collect_data
 
 class Config:
     def __init__(self, subject_id: str, model: str, stage: str):
         # usb towards the hand
-        self.subjectID = subject_id
+        self.subject_id = subject_id
         self.model = model
         self.stage = stage
         self.device = Device('sifi')
+        self.odh = None
 
         self.get_device_parameters()
         self.get_feature_parameters()
@@ -24,13 +25,22 @@ class Config:
         self.get_classifier_parameters()
         self.get_training_hyperparameters()
 
-    def get_device_parameters(self):
-        if self.device.name == "sifi":
-            self.window_length_s = 196 #ms
-            self.window_increment_s = 56 #ms
+    @property
+    def model_is_adaptive(self):
+        if self.model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
+            return False
+        elif self.model in ['within-ciil', 'combined-ciil']: # sgt adaptation
+            return True
+        else:
+            raise ValueError(f"Unexpected value for self.model. Got: {self.model}.")
 
-        self.window_length = int((self.window_length_s*self.device.fs)/1000)
-        self.window_increment = int((self.window_increment_s*self.device.fs)/1000)
+
+    def get_device_parameters(self):
+        window_length_ms = 150 #ms
+        window_increment_ms = 40 #ms
+
+        self.window_length = int((window_length_ms*self.device.fs)/1000)
+        self.window_increment = int((window_increment_ms*self.device.fs)/1000)
         if self.stage == "sgt":
             # Do we want to log during user learning phase too????
             self.log_to_file = False
@@ -44,24 +54,19 @@ class Config:
                                     ["adapt_flag", (1,1), np.int32],
                                     ["active_flag", (1,1), np.int8]]
 
-        if self.model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
-            self.model_name       = "MLP"
-            self.negative_method  = "mixed"
-            self.loss_function    = "MSELoss"
-            self.relabel_method   = None
-            self.initialization   = "SGT"
-            self.adaptation       = False
-            self.adapt_PCs        = False
-        elif self.model in ['within-ciil', 'combined-ciil']: # sgt adaptation
+        if self.model_is_adaptive:
             self.model_name       = "MLP"
             self.negative_method  = "mixed"
             self.loss_function    = "MSELoss"
             self.relabel_method   = "LabelSpreading"
             self.initialization   = "SGT"
-            self.adaptation       = True
-            self.adapt_PCs        = True
         else:
-            raise ValueError(f"Unexpected value for self.model. Got: {self.model}.")
+            self.model_name       = "MLP"
+            self.negative_method  = "mixed"
+            self.loss_function    = "MSELoss"
+            self.relabel_method   = None
+            self.initialization   = "SGT"
+
         self.WENG_SPEED_MIN = -20
         self.WENG_SPEED_MAX = -13
         self.lower_PC_percentile = 0.1
@@ -79,11 +84,10 @@ class Config:
 
     def get_datacollection_parameters(self):
         self.DC_image_location = "images/"
-        self.DC_data_location  = "data/subject" + str(self.subjectID) + "/sgt/"
+        self.DC_data_location = Path('data', 'subject', self.subject_id, 'sgt').absolute().as_posix()
         self.DC_reps           = 5
-        self.DC_rep_time       = 3
-        self.DC_rest_time      = 1
         self.DC_epochs         = 150
+        self.DC_model_file = Path(self.DC_data_location, f"trial_{self.model}", 'sgt_mdl.pkl').absolute().as_posix()
 
     def get_training_hyperparameters(self):
         self.batch_size = 64
@@ -94,35 +98,39 @@ class Config:
     def get_game_parameters(self):
         self.game_time = 600
 
-    def setup_model(self, odh, save_dir, smi):
-        if self.stage == "fitts":
-            model_to_load = f"Data/subject{self.subjectID}/sgt/trial_{self.model}/sgt_mdl.pkl"
-        else:
+    def setup_model(self):
+        if self.stage != 'fitts':
             raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
-        with open(model_to_load, 'rb') as handle:
-            loaded_mdl = pickle.load(handle)
 
+        with open(self.DC_model_file, 'rb') as handle:
+            loaded_mdl = pickle.load(handle)
     
         # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
         feature_list = self.features
 
-        if smi is None:
-            smm = False
-        else:
+
+        if self.model_is_adaptive:
             smm = True
-        classifier = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
+            smi = [
+                ['model_input', (100, 1 + (8 * self.device.num_channels)), np.double], # timestamp <- features ->
+                ['model_output', (100, 3), np.double]  # timestamp, prediction 1, prediction 2... (assumes 2 DOFs)
+            ]
+        else:
+            smm = False
+            smi = None
+        model = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
                                                                 window_size=self.window_length,
                                                                 window_increment=self.window_increment,
-                                                                online_data_handler=odh,
+                                                                online_data_handler=self.odh,
                                                                 features=feature_list,
-                                                                file_path = save_dir,
+                                                                file_path=Path(self.DC_model_file).parent.as_posix(),
                                                                 file=True,
                                                                 smm=smm,
                                                                 smm_items=smi,
                                                                 std_out=False)
-        classifier.predictor.model.net.eval()
-        classifier.run(block=False)
-        return classifier
+        model.predictor.model.net.eval()
+        model.run(block=False)
+        return model
 
     def load_sgt_data(self):
         # parse offline data into an offline data handler
@@ -133,7 +141,7 @@ class Config:
         offdh = libemg.data_handler.OfflineDataHandler()
         offdh.get_data(dataset_folder, 
                     [libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2","3","4"], "reps"),
-                        libemg.data_handler.RegexFilter("subject", "/",[str(self.subjectID)], "subjects")],
+                        libemg.data_handler.RegexFilter("subject", "/",[str(self.subject_id)], "subjects")],
                     metadata_fetchers,
                         ",")
         return offdh
@@ -163,34 +171,23 @@ class Config:
         
         # offline_classifier.__setattr__("feature_params", config.feature_dictionary)
         # save EMGClassifier to file
-        with open(f"{self.DC_data_location}trial_{self.model}/sgt_mdl.pkl", 'wb') as handle:
+        with open(self.DC_model_file, 'wb') as handle:
             pickle.dump(offline_classifier, handle)
 
     def setup_live_processing(self):
+        if self.odh is not None:
+            return self.odh
+
         smi = self.device.stream()
-        odh = libemg.data_handler.OnlineDataHandler(shared_memory_items=smi)
+        self.odh = libemg.data_handler.OnlineDataHandler(shared_memory_items=smi)
         if self.log_to_file:
-            odh.log_to_file()
-        
-        return odh, smi
+            self.odh.log_to_file()
+        return self.odh
 
     def make_sgt(self):
-        odh, smi = self.setup_live_processing()
-        args = {
-            "online_data_handler": odh,
-            "streamer": self.device.p,
-            "media_folder": self.DC_image_location,
-            "data_folder":  f"{self.DC_data_location}trial_{self.model}/",
-            "num_reps":     self.DC_reps,
-            "rep_time":     self.DC_rep_time,
-            "rest_time":    self.DC_rest_time,
-            "auto_advance": True
-        }
-        gui = libemg.gui.GUI(
-            online_data_handler=args["online_data_handler"],
-            args=args, debug=False)
+        self.setup_live_processing()
 
         if not os.path.exists(f"{self.DC_image_location}collection.mp4"):
             raise FileNotFoundError("Couldn't find collection.mp4 file. Please generate training animation.")
         
-        return gui
+        collect_data(self.odh, self.DC_image_location, f"{self.DC_data_location}trial_{self.model}/", self.DC_reps)
