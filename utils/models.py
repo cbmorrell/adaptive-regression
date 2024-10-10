@@ -3,6 +3,7 @@ from typing import Callable, Sequence
 import time
 import pickle
 import random
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -266,28 +267,28 @@ class ContrastiveModel(nn.Module):
         return predictions
 
 
-class MLP(nn.Module):
-    def __init__(self, num_input_channels: int, hidden_channels: Sequence[int], last_layer_activation: bool = False):
-        # torchvision has this as a nn.Sequential, but this makes every field something it tries to iterate through
-        super().__init__()
-        self.input_size = num_input_channels
-        layers = []
-        in_dim = num_input_channels
-        for hidden_dim in hidden_channels[:-1]:
-            layers.append(nn.Linear(in_dim, hidden_dim))
-            layers.append(nn.ReLU())
-            in_dim = hidden_dim
+# class MLP(nn.Module):
+#     def __init__(self, num_input_channels: int, hidden_channels: Sequence[int], last_layer_activation: bool = False):
+#         # torchvision has this as a nn.Sequential, but this makes every field something it tries to iterate through
+#         super().__init__()
+#         self.input_size = num_input_channels
+#         layers = []
+#         in_dim = num_input_channels
+#         for hidden_dim in hidden_channels[:-1]:
+#             layers.append(nn.Linear(in_dim, hidden_dim))
+#             layers.append(nn.ReLU())
+#             in_dim = hidden_dim
 
-        # Add final layer separately because it may not have an activation layer
-        layers.append(nn.Linear(in_dim, hidden_channels[-1]))
-        if last_layer_activation:
-            layers.append(nn.ReLU())
-        self.layers = nn.ModuleList(layers)
+#         # Add final layer separately because it may not have an activation layer
+#         layers.append(nn.Linear(in_dim, hidden_channels[-1]))
+#         if last_layer_activation:
+#             layers.append(nn.ReLU())
+#         self.layers = nn.ModuleList(layers)
 
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
+#     def forward(self, x):
+#         for layer in self.layers:
+#             x = layer(x)
+#         return x
 
 
 class ProjectionNetwork(nn.Module):
@@ -360,22 +361,22 @@ class CNN(nn.Module):
         return x
 
 
-class RNN(nn.Module):
-    def __init__(self, input_size: int, mlp: MLP, num_lstm_layers: int = 1) -> None:
-        super().__init__()
-        self.lstm = nn.LSTM(input_size, mlp.input_size, num_layers=num_lstm_layers, batch_first=True)
-        self.mlp = mlp
+# class RNN(nn.Module):
+#     def __init__(self, input_size: int, mlp: MLP, num_lstm_layers: int = 1) -> None:
+#         super().__init__()
+#         self.lstm = nn.LSTM(input_size, mlp.input_size, num_layers=num_lstm_layers, batch_first=True)
+#         self.mlp = mlp
 
         
-    def forward(self, x):
-        # Need to sort out how I'll pass data in. Pass in sequence of features or raw data?
-        # Since batch_first=True, the input should be (batch, seq, feature)
-        # So it would be (batch, samples, channels) for raw data and (batch, queue of windows, features) for features
-        x = torch.transpose(x, 1, 2)
-        x, _ = self.lstm(x)  # can pass initial hidden/cell states here if persisting states across windows is desired
-        x = x[:, 0, :]  # returns the hidden state for each time point, so only use the hidden state from the last time point
-        x = self.mlp(x)
-        return x
+#     def forward(self, x):
+#         # Need to sort out how I'll pass data in. Pass in sequence of features or raw data?
+#         # Since batch_first=True, the input should be (batch, seq, feature)
+#         # So it would be (batch, samples, channels) for raw data and (batch, queue of windows, features) for features
+#         x = torch.transpose(x, 1, 2)
+#         x, _ = self.lstm(x)  # can pass initial hidden/cell states here if persisting states across windows is desired
+#         x = x[:, 0, :]  # returns the hidden state for each time point, so only use the hidden state from the last time point
+#         x = self.mlp(x)
+#         return x
 
 
 
@@ -441,12 +442,13 @@ class MLP(nn.Module):
         self.foreground_device = "cpu"
         self.train_device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.setup_net()
-        self.setup_optimizer()
-
         self.batch_size = config.batch_size
         self.config = config
         self.frames_saved = 0
+
+        self.setup_net()
+        self.setup_optimizer()
+
 
     def setup_net(self):
         self.net = nn.Sequential(
@@ -514,7 +516,7 @@ class MLP(nn.Module):
                     loss.append(loss_value.item())
                     batch_start = batch_end
                 losses.append(sum(loss)/len(loss))
-                with open(f"Data/subject{self.config.subjectID}/{self.config.stage}/trial_{self.config.model}/loss.csv", 'a') as f:
+                with open(Path(self.config.DC_model_file).with_name('loss.csv'), 'a') as f:
                     f.writelines([str(t) + "," + str(i) + "\n" for i in loss])
         self.net.to(self.foreground_device)
 
