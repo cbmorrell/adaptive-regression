@@ -73,15 +73,9 @@ def main():
         data_directory = Path(args.data_directory).absolute().as_posix()
         odh.get_data(data_directory, regex_filters, metadata_fetchers)
 
-        windows, metadata = odh.parse_windows(config.window_length, config.window_increment, metadata_operations=dict(labels=lambda x: x[-1]))
-        fe = libemg.feature_extractor.FeatureExtractor()
-        feature_list = fe.get_feature_groups()['HTD']
-        features = fe.extract_features(feature_list, windows, array=True)
-        labels = metadata['labels']
-
         # Model setup
         config.prepare_model_from_sgt() # fits model and stores as .pkl
-        model = config.setup_model()
+        config.setup_model()
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()
