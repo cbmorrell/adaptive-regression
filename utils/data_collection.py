@@ -41,8 +41,6 @@ def collect_data(online_data_handler, media_folder, data_folder, num_reps):
         "rep_time"             : rep_time,
         "rest_time"            : 1,
         "auto_advance"         : True,
-        "visualization_horizon": 5000,
-        "visualization_rate"   : 24,
     }
     gui = libemg.gui.GUI(online_data_handler, args=args, debug=False, gesture_width=500, gesture_height=500)
     gui.start_gui()
