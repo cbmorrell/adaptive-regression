@@ -51,7 +51,7 @@ def main():
     elif args.objective == 'fitts':
         # Model setup
         config.prepare_model_from_sgt() # fits model and stores as .pkl
-        config.setup_model(online_data_handler)
+        config.setup_online_model(online_data_handler)
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()

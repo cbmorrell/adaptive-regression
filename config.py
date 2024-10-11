@@ -99,7 +99,7 @@ class Config:
     def get_game_parameters(self):
         self.game_time = 600
 
-    def setup_model(self, online_data_handler):
+    def setup_online_model(self, online_data_handler):
         if self.stage != 'fitts':
             raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
 
