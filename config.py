@@ -124,7 +124,7 @@ class Config:
                                                                 window_increment=self.window_increment,
                                                                 online_data_handler=online_data_handler,
                                                                 features=feature_list,
-                                                                file_path=Path(self.DC_model_file).parent.as_posix(),
+                                                                file_path=Path(self.DC_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
                                                                 file=True,
                                                                 smm=smm,
                                                                 smm_items=smi,
