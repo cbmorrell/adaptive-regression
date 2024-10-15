@@ -434,16 +434,19 @@ class Transformer(nn.Module):
 
 from sklearn.decomposition import PCA
 class MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, input_shape, batch_size, lr, loss_type, loss_file, num_epochs):
         super(MLP, self).__init__()
-        self.input_shape = config.input_shape
+        self.input_shape = input_shape
+        self.learning_rate = lr
+        self.loss_type = loss_type
+        self.loss_file = loss_file
+        self.num_epochs
         self.net = None
 
         self.foreground_device = "cpu"
         self.train_device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.batch_size = config.batch_size
-        self.config = config
+        self.batch_size = batch_size
         self.frames_saved = 0
 
         self.setup_net()
@@ -470,9 +473,12 @@ class MLP(nn.Module):
     
     def setup_optimizer(self):
         # set optimizer
-        self.optimizer_classifier = optim.Adam(self.net.parameters(), lr=self.config.learning_rate)
-        if self.config.loss_function == "MSELoss":
+        self.optimizer_classifier = optim.Adam(self.net.parameters(), lr=self.learning_rate)
+        if self.loss_type == "MSELoss":
             self.loss_function = nn.MSELoss()
+        else:
+            raise ValueError(f"Unexpected value for loss_function. Got: {self.loss_function}.")
+        
         
     def forward(self,x):
         if type(x) == np.ndarray:
@@ -497,7 +503,7 @@ class MLP(nn.Module):
         self.net.to(self.train_device)
         num_batch = len(memory) // self.batch_size
         losses = []
-        for e in range(self.config.DC_epochs):
+        for e in range(self.num_epochs):
             t = time.time()
             if shuffle_every_epoch:
                 memory.shuffle()
@@ -516,39 +522,20 @@ class MLP(nn.Module):
                     loss.append(loss_value.item())
                     batch_start = batch_end
                 losses.append(sum(loss)/len(loss))
-                with open(Path(self.config.DC_model_file).with_name('loss.csv'), 'a') as f:
+                with open(self.loss_file, 'a') as f:
                     f.writelines([str(t) + "," + str(i) + "\n" for i in loss])
         self.net.to(self.foreground_device)
 
-    def get_pc_thresholds(self, memory):
-        PC_Vals = memory.experience_data[:,:].mean(axis=1)
-        probabilities = self.forward(memory.experience_data)
-        probabilities = torch.tensor(probabilities)
-        predictions   = torch.argmax(probabilities,1)
-
-        lower_t = {}
-        upper_t = {}
-        for c in range(5):
-            valid_ids = predictions == c
-            if sum(valid_ids) == 0:
-                lower_t[c] = self.config.WENG_SPEED_MIN
-                upper_t[c] = self.config.WENG_SPEED_MAX
-            else:
-                sorted, _ = torch.sort(PC_Vals[valid_ids])
-                lower_t[c] = sorted[int(len(sorted)*self.config.lower_PC_percentile)].item()
-                upper_t[c] = sorted[int(len(sorted)*self.config.upper_PC_percentile)].item()
-        return lower_t, upper_t
-        
-    def adapt(self, memory):
+    def adapt(self, memory, filename = None):
         self.net.to(self.train_device)
         self.train()
         self.fit(memory=memory)
-        if self.config.visualize_training:
-            self.visualize(memory=memory)
+        if filename is not None:
+            self.visualize(memory=memory, filename=filename)
         self.net.to(self.foreground_device)
         self.eval()
 
-    def visualize(self, memory):
+    def visualize(self, memory, filename):
         predictions = self.forward(memory.experience_data.to(self.train_device))
         predictions = predictions.detach().cpu().numpy()
         def create_frame(t):
@@ -574,7 +561,7 @@ class MLP(nn.Module):
 
             plt.tight_layout()
 
-            plt.savefig(f"Figures/Animation/img_{str(self.frames_saved).zfill(3)}_S{self.config.subjectID}_T{self.config.trial}")
+            plt.savefig(filename)
             plt.close()
 
         create_frame(self.frames_saved)
