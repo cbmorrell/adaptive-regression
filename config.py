@@ -168,7 +168,7 @@ class Config:
     def prepare_model_from_sgt(self):
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
-        mdl = MLP(self)
+        mdl = MLP(self.input_shape, self.batch_size, self.learning_rate, self.loss_function, Path(self.DC_model_file).with_name('loss.csv').as_posix(), self.DC_epochs)
         print('Fitting model...')
         mdl.fit(shuffle_every_epoch=True, memory=sgt_memory)
         # install mdl and thresholds to EMGClassifier
