@@ -1,10 +1,11 @@
 import argparse
 from pathlib import Path
+from copy import deepcopy
+from multiprocessing import Lock
 
 import libemg
-from libemg.data_handler import RegexFilter, FilePackager
 import numpy as np
-from utils.adaptation import memory_manager, adapt_manager
+from utils.adaptation import memory_manager, adapt_manager, AdaptationIsoFitts
 from multiprocessing import Process
 
 from config import Config
@@ -28,6 +29,11 @@ def main():
     print(args)
 
     config = Config(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
+    smm = libemg.shared_memory_manager.SharedMemoryManager()
+    for item in config.shared_memory_items:
+        smi_args = deepcopy(item)
+        smi_args.append(Lock())
+        smm.create_variable(*smi_args)
 
     online_data_handler = config.setup_live_processing()
     if args.analyze:
@@ -76,10 +82,9 @@ def main():
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
-        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
+        isofitts = AdaptationIsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
                                                            save_file=Path(config.DC_model_file).with_name('AD_fitts.pkl').as_posix())
         isofitts.run()
-
 
     elif args.objective == 'fitts':
         # assume we have a model from the adaptation phase (whether it was not adapted or adapted)
