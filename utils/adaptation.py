@@ -140,25 +140,17 @@ class Memory:
         self.experience_timestamps = obj.experience_timestamps
 
 
-def adapt_manager(in_port, out_port, save_dir, online_classifier):
+def adapt_manager(adapt, smi, save_dir, offline_predictor):
     logging.basicConfig(filename=save_dir + "adaptmanager.log",
                         filemode='w',
                         encoding="utf-8",
                         level=logging.INFO)
-    # this is where we receive commands from the memoryManager
-    in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    in_sock.bind(("localhost", in_port))
-
-    # this is where we write commands to the memoryManger
-    # managers only own their input sockets
-    # out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # out_sock.bind(("localhost", out_port))
-    shared_memory_items = online_classifier.smi
+    
+    
     smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for item in shared_memory_items:
+    for item in smi:
         smm.find_variable(*item)
 
-    emg_classifier = online_classifier.classifier
 
     # initialize the memomry
     memory = Memory()
@@ -173,128 +165,55 @@ def adapt_manager(in_port, out_port, save_dir, online_classifier):
     time.sleep(3)
     done = False
     
-    while time.perf_counter() - start_time < config.game_time:
-        try:
+    while not done:
             # see what we have available:
-            ready_to_read, ready_to_write, in_error = \
-                select.select([in_sock], [], [],0)
-            # if we have a message on the in_sock get the message
-            # this means we have new data to load in from the memory manager
-            for sock in ready_to_read:
-                received_data, _ = sock.recvfrom(1024)
-                data = received_data.decode("utf-8")
-                # we were signalled we have data we to load
-                if data == "WROTE":
-                    # append this data to our memory
-                    t1 = time.perf_counter()
-                    new_memory = Memory()
-                    new_memory.from_file(save_dir, memory_id)
-                    print(f"Loaded {memory_id} memory")
-                    memory += new_memory
-                    del_t = time.perf_counter() - t1
-                    memory_id += 1
-                    logging.info(f"ADAPTMANAGER: ADDED MEMORIES, \tCURRENT SIZE: {len(memory)}; \tLOAD TIME: {del_t:.2f}s")
-            # if we still have no memories (rare edge case)
-            if not len(memory):
-                logging.info("NO MEMORIES -- SKIPPED TRAINING")
-                t1 = time.perf_counter()
-                time.sleep(3)
-                del_t = time.perf_counter() - t1
-                logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
-            else:
-                # abstract decoders/fake abstract decoder/sgt
-                if config.adaptation:
-                                        
-                    if config.relabel_method == "LabelSpreading":
-                        if time.perf_counter() - start_time > 120:
-                            t_ls = time.perf_counter()
-                            negative_memory_index = [i == "N" for i in memory.experience_outcome]
-                            labels = memory.experience_targets.argmax(1)
-                            labels[negative_memory_index] = -1
-                            ls = LabelSpreading(kernel='knn', alpha=0.2, n_neighbors=50)
-                            ls.fit(memory.experience_data.numpy(), labels)
-                            current_targets = ls.transduction_
-
-                            
-                            velocity_metric = torch.mean(memory.experience_data,1)
-                            # two component unsupervised GMM
-                            gmm = GaussianMixture(n_components=2).fit(velocity_metric.unsqueeze(1))
-                            gmm_probs       = gmm.predict_proba(velocity_metric.unsqueeze(1)) 
-                            gmm_predictions = np.argmax(gmm_probs,1)
-                            lower_cluster = np.argmin(gmm.means_)
-                            mask = gmm_predictions == lower_cluster
-                            # mask2 = np.max(gmm_probs,1) > 0.95
-                            # mask = np.logical_and(mask1, mask2)
-                            current_targets[mask] = 2
-                            labels = torch.tensor(current_targets, dtype=torch.long)
-                            memory.experience_targets = torch.eye(5)[labels]
-                            del_t_ls = time.perf_counter() - t_ls
-                            logging.info(f"ADAPTMANAGER: LS/GMM - round {adapt_round}; \tLS TIME: {del_t_ls:.2f}s")
-                    
-                    t1 = time.perf_counter()
-                    emg_classifier.classifier.adapt(memory)
-                    del_t = time.perf_counter() - t1
-                    logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
-                    
-                    if config.adapt_PCs:
-                        try:
-                            if time.perf_counter() - start_time > 30:
-                                t1_pc = time.perf_counter()
-                                old_min = emg_classifier.th_min_dic
-                                old_max = emg_classifier.th_max_dic
-                                new_low, new_high = emg_classifier.classifier.get_pc_thresholds(memory)# make this run on background
-                                th_min_dic,th_max_dic = {}, {}
-                                for i in range(5):
-                                    th_min_dic[i] = new_low[i]*(0.25) + (1-0.25)*old_min[i]
-                                    th_max_dic[i] = new_high[i]*(0.25) + (1-0.25)*old_max[i]
-                                emg_classifier.__setattr__("th_min_dic", th_min_dic)
-                                emg_classifier.__setattr__("th_max_dic", th_max_dic)
-                                del_t_pc = time.perf_counter() - t1_pc
-                                logging.info(f"ADAPTMANAGER: PC - round {adapt_round}; \tPC TIME: {del_t_pc:.2f}s")
-
-                        except:
-                            print("Could not set PCs")
-                    with open(online_classifier.options['file_path'] +  'mdl' + str(adapt_round) + '.pkl', 'wb') as handle:
-                        pickle.dump(emg_classifier, handle)
-
-                    smm.modify_variable("adapt_flag", lambda x: adapt_round)
-                    print(f"Adapted {adapt_round} times")
-                    adapt_round += 1
-                else:
-                    t1 = time.perf_counter()
-                    time.sleep(5)
-                    del_t = time.perf_counter() - t1
-                    logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
-                    adapt_round += 1
+                
+            # 1. Check if we have an empty memory buffer -- if so time.sleep and continue
+            # logging.info("NO MEMORIES -- SKIPPED TRAINING")
+            # t1 = time.perf_counter()
+            # time.sleep(3)
+            # del_t = time.perf_counter() - t1
+            # logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
             
-            # signal to the memory manager we are idle and waiting for data
-            in_sock.sendto("WAITING".encode("utf-8"), ("localhost", out_port))
-            logging.info("ADAPTMANAGER: WAITING FOR DATA")
-            time.sleep(0.5)
-        except:
-            logging.error("ADAPTMANAGER: "+traceback.format_exc())
-    else:
-        print("AdaptManager Finished!")
-        memory.write(save_dir, 1000)
+
+            # 2. Check if we have memory to load, load it
+            # t1 = time.perf_counter()
+            # new_memory = Memory()
+            # new_memory.from_file(save_dir, memory_id)
+            # print(f"Loaded {memory_id} memory")
+            # memory += new_memory
+            # del_t = time.perf_counter() - t1
+            # memory_id += 1
+            # logging.info(f"ADAPTMANAGER: ADDED MEMORIES, \tCURRENT SIZE: {len(memory)}; \tLOAD TIME: {del_t:.2f}s")
+                
+            # 3. Perform incremental learning step
+            # - adapt
+            # logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
+            # with open(online_classifier.options['file_path'] +  'mdl' + str(adapt_round) + '.pkl', 'wb') as handle:
+                #     pickle.dump(emg_classifier, handle)
+
+            # smm.modify_variable("adapt_flag", lambda x: adapt_round)
+            # print(f"Adapted {adapt_round} times")
+            # adapt_round += 1
+                
+            # 4. Check if done
+            # done = True
+            
+            
+        # print("AdaptManager Finished!")
+        # memory.write(save_dir, 1000)
+        pass
 
 
 
-def memory_manager(in_port, unity_port, out_port, save_dir, negative_method, shared_memory_items):
+def memory_manager(smi, save_dir):
     logging.basicConfig(filename=save_dir + "memorymanager.log",
                         filemode='w',
                         encoding="utf-8",
                         level=logging.INFO)
-    
-    # this is where we receive commands from the classifier
-    in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    in_sock.bind(("localhost", in_port))
-
-    # this is where we receive context from unity
-    unity_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    unity_sock.bind(("localhost", unity_port))
 
     smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for item in shared_memory_items:
+    for item in smi:
         smm.find_variable(*item)
 
     # this is where we send out commands to classifier
