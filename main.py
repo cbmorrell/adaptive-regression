@@ -30,10 +30,8 @@ def main():
 
     config = Config(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for item in config.shared_memory_items:
-        smi_args = deepcopy(item)
-        smi_args.append(Lock())
-        smm.create_variable(*smi_args)
+    for sm_item in config.shared_memory_items:
+        smm.create_variable(*sm_item)
 
     online_data_handler = config.setup_live_processing()
     if args.analyze:

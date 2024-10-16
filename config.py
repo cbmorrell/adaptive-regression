@@ -1,4 +1,5 @@
 from pathlib import Path
+from multiprocessing import Lock
 
 import libemg
 import numpy as np
@@ -57,6 +58,8 @@ class Config:
                                     ["adapt_flag", (1,1),  np.int32],
                                     ["active_flag", (1,1), np.int8],
                                     ["memory_update_flag", (1,1), np.dtype('U10')]]
+        for item in self.shared_memory_items:
+            item.append(Lock())
 
         if self.model_is_adaptive:
             self.model_name       = "MLP"
