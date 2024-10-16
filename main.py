@@ -4,6 +4,8 @@ from pathlib import Path
 import libemg
 from libemg.data_handler import RegexFilter, FilePackager
 import numpy as np
+from utils.adaptation import memory_manager, adapt_manager
+from multiprocessing import Process
 
 from config import Config
 
@@ -48,15 +50,45 @@ def main():
 
         config.start_sgt(online_data_handler)
 
+    elif args.objective == 'adaptation':
+        config.prepare_model_from_sgt()
+        mdl = config.load_sgt_model()
+
+        all_smi = config.shared_memory_items
+        memoryProcess = Process(target = memory_manager, daemon=True, 
+                                args=
+                                (
+                                    
+                                )
+        )
+        memoryProcess.start()
+
+        adaptProcess = Process(target = adapt_manager, daemon=True,
+                               args=
+                               (
+                                   "",
+                                   all_smi,
+                                   mdl
+                               )
+        )
+        adaptProcess.start()
+
+
+        # Create Fitts environment with or without CIIL
+        controller = libemg.environments.controllers.RegressorController()
+        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
+                                                           save_file=Path(config.DC_model_file).with_name('AD_fitts.pkl').as_posix())
+        isofitts.run()
+
+
     elif args.objective == 'fitts':
-        # Model setup
-        config.prepare_model_from_sgt() # fits model and stores as .pkl
-        config.setup_online_model(online_data_handler)
+        # assume we have a model from the adaptation phase (whether it was not adapted or adapted)
+        mdl = config.load_adaptation_model(online_data_handler)
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()
-        isofitts = libemg.environments.isofitts.IsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
-                                                         save_file=Path(config.DC_model_file).with_name('fitts.pkl').as_posix())
+        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
+                                                           save_file=Path(config.DC_model_file).with_name('VAL_fitts.pkl').as_posix())
         isofitts.run()
 
     print('------------------Main script complete------------------')

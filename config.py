@@ -23,8 +23,9 @@ class Config:
         self.get_device_parameters()
         self.get_feature_parameters()
         self.get_datacollection_parameters()
-        self.get_model_parameters()
+        self.get_classifier_parameters()
         self.get_training_hyperparameters()
+        self.get_adaptation_parameters()
 
     @property
     def model_is_adaptive(self):
@@ -48,12 +49,14 @@ class Config:
         else:
             self.log_to_file = True
 
-    def get_model_parameters(self):
+    def get_classifier_parameters(self):
         self.oc_output_format = "probabilities"
-        self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, class prediction, confidence
+        self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, <DOFs>
                                     ["model_input", (100,1+self.input_shape), np.double], # timestamp, <- features ->
-                                    ["adapt_flag", (1,1), np.int32],
-                                    ["active_flag", (1,1), np.int8]]
+                                    ["environment_output", (100, 1+2), np.float32],  # timestamp, <2 DoF optimal direction>, <2 DoF CIIL direction>
+                                    ["adapt_flag", (1,1),  np.int32],
+                                    ["active_flag", (1,1), np.int8],
+                                    ["memory_update_flag", (1,1), np.dtype('U10')]]
 
         if self.model_is_adaptive:
             self.model_name       = "MLP"
@@ -67,12 +70,6 @@ class Config:
             self.loss_function    = "MSELoss"
             self.relabel_method   = None
             self.initialization   = "SGT"
-
-        self.WENG_SPEED_MIN = -20
-        self.WENG_SPEED_MAX = -13
-        self.lower_PC_percentile = 0.1
-        self.upper_PC_percentile = 0.9
-        self.to_NM_percentile = -0.25
     
     def get_feature_parameters(self):
         self.features = ["WENG"]
@@ -84,11 +81,14 @@ class Config:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
-        self.DC_image_location = "images/close-pro-open-sup/"
-        self.DC_data_location = Path('data', self.subject_id, self.model).absolute().as_posix()
+        self.DC_image_location = "images/abduct-adduct-flexion-extension/"
+        self.DC_data_location = Path('', self.subject_id, self.model).absolute().as_posix()
         self.DC_reps           = 5
         self.DC_epochs         = 150
         self.DC_model_file = Path(self.DC_data_location, 'sgt_mdl.pkl').absolute().as_posix()
+
+    def get_adaptation_parameters(self):
+        self.AD_model_file = Path(self.DC_data_location, 'ad_mdl.pkl').absolute().as_posix()
 
     def get_training_hyperparameters(self):
         self.batch_size = 64
@@ -99,8 +99,8 @@ class Config:
     def get_game_parameters(self):
         self.game_time = 600
 
-    def setup_online_model(self, online_data_handler):
-        if self.stage != 'fitts':
+    def load_sgt_model(self, online_data_handler):
+        if self.stage != 'adaptation':
             raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
 
         with open(self.DC_model_file, 'rb') as handle:
@@ -109,6 +109,39 @@ class Config:
         # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
         feature_list = self.features
 
+
+        if self.model_is_adaptive:
+            smm = True
+            smi = [
+                ['model_input', (100, 1 + (8 * self.device.num_channels)), np.double], # timestamp <- features ->
+                ['model_output', (100, 3), np.double]  # timestamp, prediction 1, prediction 2... (assumes 2 DOFs)
+            ]
+        else:
+            smm = False
+            smi = None
+        model = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
+                                                                window_size=self.window_length,
+                                                                window_increment=self.window_increment,
+                                                                online_data_handler=online_data_handler,
+                                                                features=feature_list,
+                                                                file_path=Path(self.DC_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
+                                                                file=True,
+                                                                smm=smm,
+                                                                smm_items=smi,
+                                                                std_out=False)
+        model.predictor.model.net.eval()
+        model.run(block=False)
+        return model
+    
+    def load_adaptation_model(self, online_data_handler):
+        if self.stage != 'fitts':
+            raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
+
+        with open(self.AD_model_file, 'rb') as handle:
+            loaded_mdl = pickle.load(handle)
+    
+        # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
+        feature_list = self.features
 
         if self.model_is_adaptive:
             smm = True
@@ -178,6 +211,7 @@ class Config:
         # save EMGClassifier to file
         with open(self.DC_model_file, 'wb') as handle:
             pickle.dump(offline_regressor, handle)
+
 
     def setup_live_processing(self):
         smi = self.device.stream()
