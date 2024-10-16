@@ -2,8 +2,30 @@ import random
 import pickle
 import logging
 import time
+from multiprocessing import Lock
+import traceback
 
 import torch
+import numpy as np
+import libemg
+
+
+class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
+    def __init__(self, controller: libemg.environments.controllers.Controller, prediction_map: dict | None = None, num_circles: int = 30, num_trials: int = 15, dwell_time: float = 3, timeout: float = 30, velocity: float = 25, save_file: str | None = None, width: int = 1250, height: int = 750, fps: int = 60, proportional_control: bool = True):
+        super().__init__(controller, prediction_map, num_circles, num_trials, dwell_time, timeout, velocity, save_file, width, height, fps, proportional_control)
+        self.smm = libemg.shared_memory_manager.SharedMemoryManager()
+        self.smm.find_variable('environment', (1, 3), np.float32, Lock())
+
+    def _log(self, label, timestamp):
+        # Write to log_dictionary
+        super()._log(label, timestamp)
+
+        # Want to send the timestamp and the optimal direction
+        optimal_direction = np.array(self.log_dictionary['goal_circle'][-1]) - np.array(self.log_dictionary['cursor_position'][-1])
+        optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
+        message = f"{timestamp} {optimal_direction[0]} {optimal_direction[1]}"
+        self.smm.modify_variable('environment', lambda _: message)
+
 import numpy as np
 import libemg
 
