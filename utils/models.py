@@ -440,7 +440,7 @@ class MLP(nn.Module):
         self.learning_rate = lr
         self.loss_type = loss_type
         self.loss_file = loss_file
-        self.num_epochs
+        self.num_epochs = num_epochs
         self.net = None
 
         self.foreground_device = "cpu"
