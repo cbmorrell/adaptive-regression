@@ -23,7 +23,7 @@ class Config:
         self.get_device_parameters()
         self.get_feature_parameters()
         self.get_datacollection_parameters()
-        self.get_classifier_parameters()
+        self.get_model_parameters()
         self.get_training_hyperparameters()
 
     @property
@@ -48,7 +48,7 @@ class Config:
         else:
             self.log_to_file = True
 
-    def get_classifier_parameters(self):
+    def get_model_parameters(self):
         self.oc_output_format = "probabilities"
         self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, class prediction, confidence
                                     ["model_input", (100,1+self.input_shape), np.double], # timestamp, <- features ->
