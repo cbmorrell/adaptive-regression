@@ -85,7 +85,7 @@ class Config:
 
     def get_datacollection_parameters(self):
         self.DC_image_location = "images/abduct-adduct-flexion-extension/"
-        self.DC_data_location = Path('', self.subject_id, self.model).absolute().as_posix()
+        self.DC_data_location = Path('data', self.subject_id, self.model).absolute().as_posix()
         self.DC_reps           = 5
         self.DC_epochs         = 150
         self.DC_model_file = Path(self.DC_data_location, 'sgt_mdl.pkl').absolute().as_posix()
@@ -171,9 +171,8 @@ class Config:
 
     def load_sgt_data(self):
         # parse offline data into an offline data handler
-        dataset_folder = f'./'
-        package_function = lambda x, y: True
-        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter(self.DC_image_location, ".txt", ["collection"], "labels"), package_function)]
+        package_function = lambda x, y: Path(x).parent == Path(y).parent
+        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter(self.DC_data_location + '/', ".txt", ["labels"], "labels"), package_function)]
             
         offdh = libemg.data_handler.OfflineDataHandler()
         regex_filters = [
@@ -181,7 +180,7 @@ class Config:
             libemg.data_handler.RegexFilter("/", "/",[str(self.subject_id)], "subjects"),
             libemg.data_handler.RegexFilter('/', '/', [self.model], 'model_data')
         ]
-        offdh.get_data(dataset_folder, regex_filters, metadata_fetchers, ",")
+        offdh.get_data(self.DC_data_location, regex_filters, metadata_fetchers, ",")
         return offdh
 
     def offdh_to_memory(self):
