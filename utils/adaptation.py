@@ -1,3 +1,4 @@
+from pathlib import Path
 import random
 import pickle
 import logging
@@ -8,6 +9,11 @@ import traceback
 import torch
 import numpy as np
 import libemg
+
+
+WAITING = 0
+WROTE = 1
+DONE_TASK = -1000
 
 
 class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
@@ -23,8 +29,12 @@ class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
         # Want to send the timestamp and the optimal direction
         optimal_direction = np.array(self.log_dictionary['goal_circle'][-1]) - np.array(self.log_dictionary['cursor_position'][-1])
         optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
-        message = f"{timestamp} {optimal_direction[0]} {optimal_direction[1]}"
-        self.smm.modify_variable('environment_output', lambda _: message)
+        output = np.array([timestamp, optimal_direction[0], optimal_direction[1]], dtype=np.float32)
+        self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
+
+    def run(self):
+        super().run()
+        self.smm.modify_variable('environment_output', lambda x: np.vstack((np.array([DONE_TASK, DONE_TASK, DONE_TASK]), x))[:x.shape[0]])
 
 
 class Memory:
@@ -51,8 +61,8 @@ class Memory:
                 self.experience_targets    = other_memory.experience_targets
                 self.experience_data       = other_memory.experience_data
                 self.experience_context    = other_memory.experience_context
-                self.experience_ids        = other_memory.experience_ids
                 self.experience_outcome    = other_memory.experience_outcome
+                self.experience_timestamps = other_memory.experience_timestamps
                 self.memories_stored       = other_memory.memories_stored
             else:
                 self.experience_targets = torch.cat((self.experience_targets,other_memory.experience_targets))
@@ -131,25 +141,27 @@ class Memory:
         self.experience_timestamps = obj.experience_timestamps
 
 
-def adapt_manager(in_port, out_port, save_dir, online_classifier):
-    logging.basicConfig(filename=save_dir + "adaptmanager.log",
+def adapt_manager(save_dir, online_classifier, config):
+    logging.basicConfig(filename=Path(save_dir, "adaptmanager.log"),
                         filemode='w',
                         encoding="utf-8",
                         level=logging.INFO)
     # this is where we receive commands from the memoryManager
-    in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    in_sock.bind(("localhost", in_port))
+    # in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # in_sock.bind(("localhost", in_port))
 
     # this is where we write commands to the memoryManger
     # managers only own their input sockets
     # out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     # out_sock.bind(("localhost", out_port))
-    shared_memory_items = online_classifier.smi
-    smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for item in shared_memory_items:
-        smm.find_variable(*item)
 
-    emg_classifier = online_classifier.classifier
+    # shared_memory_items = online_classifier.smi
+    smm = libemg.shared_memory_manager.SharedMemoryManager()
+    for item in config.shared_memory_items:
+        smm.find_variable(*item)
+    # smm.find_variable('memory', (1, 1), np.dtype('U10'), Lock())
+    # smm.find_variable('adapt_flag', (1, 1), np.int32, Lock())
+    emg_predictor = online_classifier.predictor
 
     # initialize the memomry
     memory = Memory()
@@ -166,25 +178,18 @@ def adapt_manager(in_port, out_port, save_dir, online_classifier):
     
     while time.perf_counter() - start_time < config.game_time:
         try:
-            # see what we have available:
-            ready_to_read, ready_to_write, in_error = \
-                select.select([in_sock], [], [],0)
-            # if we have a message on the in_sock get the message
-            # this means we have new data to load in from the memory manager
-            for sock in ready_to_read:
-                received_data, _ = sock.recvfrom(1024)
-                data = received_data.decode("utf-8")
-                # we were signalled we have data we to load
-                if data == "WROTE":
-                    # append this data to our memory
-                    t1 = time.perf_counter()
-                    new_memory = Memory()
-                    new_memory.from_file(save_dir, memory_id)
-                    print(f"Loaded {memory_id} memory")
-                    memory += new_memory
-                    del_t = time.perf_counter() - t1
-                    memory_id += 1
-                    logging.info(f"ADAPTMANAGER: ADDED MEMORIES, \tCURRENT SIZE: {len(memory)}; \tLOAD TIME: {del_t:.2f}s")
+            data = smm.get_variable('memory_update_flag')
+            if data == WROTE:
+                # we were signalled we have data to load
+                # append this data to our memory
+                t1 = time.perf_counter()
+                new_memory = Memory()
+                new_memory.from_file(save_dir, memory_id)
+                print(f"Loaded {memory_id} memory")
+                memory += new_memory
+                del_t = time.perf_counter() - t1
+                memory_id += 1
+                logging.info(f"ADAPTMANAGER: ADDED MEMORIES, \tCURRENT SIZE: {len(memory)}; \tLOAD TIME: {del_t:.2f}s")
             # if we still have no memories (rare edge case)
             if not len(memory):
                 logging.info("NO MEMORIES -- SKIPPED TRAINING")
@@ -195,58 +200,13 @@ def adapt_manager(in_port, out_port, save_dir, online_classifier):
             else:
                 # abstract decoders/fake abstract decoder/sgt
                 if config.adaptation:
-                                        
-                    if config.relabel_method == "LabelSpreading":
-                        if time.perf_counter() - start_time > 120:
-                            t_ls = time.perf_counter()
-                            negative_memory_index = [i == "N" for i in memory.experience_outcome]
-                            labels = memory.experience_targets.argmax(1)
-                            labels[negative_memory_index] = -1
-                            ls = LabelSpreading(kernel='knn', alpha=0.2, n_neighbors=50)
-                            ls.fit(memory.experience_data.numpy(), labels)
-                            current_targets = ls.transduction_
-
-                            
-                            velocity_metric = torch.mean(memory.experience_data,1)
-                            # two component unsupervised GMM
-                            gmm = GaussianMixture(n_components=2).fit(velocity_metric.unsqueeze(1))
-                            gmm_probs       = gmm.predict_proba(velocity_metric.unsqueeze(1)) 
-                            gmm_predictions = np.argmax(gmm_probs,1)
-                            lower_cluster = np.argmin(gmm.means_)
-                            mask = gmm_predictions == lower_cluster
-                            # mask2 = np.max(gmm_probs,1) > 0.95
-                            # mask = np.logical_and(mask1, mask2)
-                            current_targets[mask] = 2
-                            labels = torch.tensor(current_targets, dtype=torch.long)
-                            memory.experience_targets = torch.eye(5)[labels]
-                            del_t_ls = time.perf_counter() - t_ls
-                            logging.info(f"ADAPTMANAGER: LS/GMM - round {adapt_round}; \tLS TIME: {del_t_ls:.2f}s")
-                    
                     t1 = time.perf_counter()
-                    emg_classifier.classifier.adapt(memory)
+                    emg_predictor.model.adapt(memory)
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
                     
-                    if config.adapt_PCs:
-                        try:
-                            if time.perf_counter() - start_time > 30:
-                                t1_pc = time.perf_counter()
-                                old_min = emg_classifier.th_min_dic
-                                old_max = emg_classifier.th_max_dic
-                                new_low, new_high = emg_classifier.classifier.get_pc_thresholds(memory)# make this run on background
-                                th_min_dic,th_max_dic = {}, {}
-                                for i in range(5):
-                                    th_min_dic[i] = new_low[i]*(0.25) + (1-0.25)*old_min[i]
-                                    th_max_dic[i] = new_high[i]*(0.25) + (1-0.25)*old_max[i]
-                                emg_classifier.__setattr__("th_min_dic", th_min_dic)
-                                emg_classifier.__setattr__("th_max_dic", th_max_dic)
-                                del_t_pc = time.perf_counter() - t1_pc
-                                logging.info(f"ADAPTMANAGER: PC - round {adapt_round}; \tPC TIME: {del_t_pc:.2f}s")
-
-                        except:
-                            print("Could not set PCs")
                     with open(online_classifier.options['file_path'] +  'mdl' + str(adapt_round) + '.pkl', 'wb') as handle:
-                        pickle.dump(emg_classifier, handle)
+                        pickle.dump(emg_predictor, handle)
 
                     smm.modify_variable("adapt_flag", lambda x: adapt_round)
                     print(f"Adapted {adapt_round} times")
@@ -259,7 +219,7 @@ def adapt_manager(in_port, out_port, save_dir, online_classifier):
                     adapt_round += 1
             
             # signal to the memory manager we are idle and waiting for data
-            in_sock.sendto("WAITING".encode("utf-8"), ("localhost", out_port))
+            smm.modify_variable('memory_update_flag', lambda _: WAITING)
             logging.info("ADAPTMANAGER: WAITING FOR DATA")
             time.sleep(0.5)
         except:
@@ -270,28 +230,15 @@ def adapt_manager(in_port, out_port, save_dir, online_classifier):
 
 
 
-def memory_manager(in_port, unity_port, out_port, save_dir, negative_method, shared_memory_items):
-    logging.basicConfig(filename=save_dir + "memorymanager.log",
+def memory_manager(save_dir, shared_memory_items):
+    logging.basicConfig(filename=Path(save_dir, "memorymanager.log"),
                         filemode='w',
                         encoding="utf-8",
                         level=logging.INFO)
-    
-    # this is where we receive commands from the classifier
-    in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    in_sock.bind(("localhost", in_port))
-
-    # this is where we receive context from unity
-    unity_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    unity_sock.bind(("localhost", unity_port))
 
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for item in shared_memory_items:
         smm.find_variable(*item)
-
-    # this is where we send out commands to classifier
-    # managers only own their input sockets
-    # out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # out_sock.bind(("localhost", out_port))
 
     # initialize the memory
     memory = Memory()
@@ -301,104 +248,92 @@ def memory_manager(in_port, unity_port, out_port, save_dir, negative_method, sha
     num_written = 0
     total_samples_written = 0
     total_samples_unfound = 0
-    waiting_flag = 0
     done=False
 
     while not done:
         try:
-            # see what we have available:
-            ready_to_read, ready_to_write, in_error = \
-                select.select([in_sock, unity_sock], [], [],0)
-            for sock in ready_to_read:
-                received_data, _ = sock.recvfrom(512)
-                data = received_data.decode("utf-8")
+            environment_data = smm.get_variable('environment_output')[0]
+
+            # May need to handle receiving no data...
+            # Previous code also didn't allow both to happen in one loop
                 
-                if sock == unity_sock:
-                    if data == "DONE":
-                        done = True
-                        del_t = time.perf_counter() - start_time
-                        logging.info(f"MEMORYMANAGER: GOT DONE FLAG AT {del_t:.2f}s")
-                    else:
-                        result = decode_unity(data, smm, negative_method)
-                        if result == None:
-                            total_samples_unfound += 1
-                            continue
-                        adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp = result 
-                        if (adaptation_data.shape[0]) != (adaptation_labels.shape[0]):
-                            continue
-                        memory.add_memories(adaptation_data, adaptation_labels, adaptation_direction,adaptation_type, timestamp)
-                    # print(memory.memories_stored)
-                elif sock == in_sock or waiting_flag:
-                    if data == "WAITING" or waiting_flag:
-                        # write memory to file
-                        waiting_flag = 1
-                        if len(memory):# never write an empty memory
-                            t1 = time.perf_counter()
-                            memory.write(save_dir, num_written)
-                            del_t = time.perf_counter() - t1
-                            logging.info(f"MEMORYMANAGER: WROTE FILE: {num_written},\t lines:{len(memory)},\t unfound: {total_samples_unfound},\t WRITE TIME: {del_t:.2f}s")
-                            num_written += 1
-                            memory = Memory()
-                            in_sock.sendto("WROTE".encode("utf-8"), ("localhost", out_port))
-                            waiting_flag = 0
+            if np.all(environment_data == DONE_TASK):
+                done = True
+                del_t = time.perf_counter() - start_time
+                logging.info(f"MEMORYMANAGER: GOT DONE FLAG AT {del_t:.2f}s")
+            else:
+                result = make_pseudo_labels(environment_data, smm)
+                if result is None:
+                    total_samples_unfound += 1
+                    continue
+                adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp = result 
+                if (adaptation_data.shape[0]) != (adaptation_labels.shape[0]):
+                    continue
+                memory.add_memories(adaptation_data, adaptation_labels, adaptation_direction,adaptation_type, timestamp)
+
+            memory_data = smm.get_variable('memory_update_flag')
+
+            if memory_data == WAITING:
+                # write memory to file
+                if len(memory):# never write an empty memory
+                    t1 = time.perf_counter()
+                    memory.write(save_dir, num_written)
+                    del_t = time.perf_counter() - t1
+                    logging.info(f"MEMORYMANAGER: WROTE FILE: {num_written},\t lines:{len(memory)},\t unfound: {total_samples_unfound},\t WRITE TIME: {del_t:.2f}s")
+                    num_written += 1
+                    memory = Memory()
+                    # in_sock.sendto("WROTE".encode("utf-8"), ("localhost", out_port))
+                    smm.modify_variable('memory', lambda _: WROTE)    # tell adapt manager that it has new data
         except:
             logging.error("MEMORYMANAGER: "+traceback.format_exc())
     
 
-def decode_unity(packet, smm, negative_method):
-    class_map = ["DOWN","UP","NONE","RIGHT","LEFT", "UNUSED"]
-    message_parts = packet.split(" ")
-    outcome = message_parts[0]
-    context = [message_parts[2], message_parts[3]]
-    if context == ["UNUSED", "UNUSED"]:
-        return None
-    timestamp = float(message_parts[1])
+def make_pseudo_labels(environment_data, smm):
+    timestamp = environment_data[0]
+    optimal_direction = environment_data[1:]
+
     # find the features: data - timestamps, <- features ->
-    feature_data = smm.get_variable("classifier_input")
+    feature_data = smm.get_variable("model_input")
     feature_data_index = np.where(feature_data[:,0] == timestamp)
     features = torch.tensor(feature_data[feature_data_index,1:].squeeze())
     if len(feature_data_index[0]) == 0:
         return None
     
     # find the predictions info: 
-    prediction_data = smm.get_variable("classifier_output")
+    prediction_data = smm.get_variable("model_output")
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)
-    prediction = prediction_data[prediction_data_index,1]
-    prediction_conf = prediction_data[prediction_data_index,2]
+    prediction = prediction_data[prediction_data_index, 1:]
 
-    # PC = feature_file[idx,2]
-    expected_direction = [class_map.index(context[0]),class_map.index(context[1])]
-     # remove all "UNUSED"
+    # Designed this thinking we'd have 1 prediction here, but that doesn't seem to be the case so far
+    # NOTE: Timestamps aren't matching up for some reason, so we stop getting here...
+    outcomes = torch.tensor(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
+    # TODO: need to handle case where we're in the target...
 
-    adaptation_labels    = []
     adaptation_data      = []
     adaptation_data.append(features)
     adaptation_direction = []
-    adaptation_direction.append(expected_direction)
+    adaptation_direction.append(optimal_direction)
     adaptation_outcome   = []
-    adaptation_outcome.append(outcome)
+    adaptation_outcome.append(outcomes)
     timestamp = [timestamp]
 
-    one_hot_matrix = torch.eye(5)
 
-    # when going down is closer to the planet BUT you're running into a wall,
-    # unused is used.
-    # remove it here so its still logged in adaptation_outcome, but not as a label/target.
-    expected_direction = [i for i in expected_direction if i != 5]
-    if outcome == "P":
-        # when its positive context, we make the adaptation target completely w/ 
-        try:
-            adaptation_labels.append(one_hot_matrix[int(prediction),:])
-        except Exception as e:
-            return None
-    elif outcome == "N":
-        if negative_method == "mixed":
-            mixed_label = torch.zeros(5)
-            for o in expected_direction:
-                mixed_label += one_hot_matrix[o,:]/len(expected_direction)
-            adaptation_labels.append(mixed_label)
+    # Project prediction onto optimal direction
+    adaptation_labels = (torch.dot(prediction, optimal_direction) / torch.dot(optimal_direction, optimal_direction)) * optimal_direction
+    positive_mask = torch.where(outcomes == 'P')
 
-    adaptation_labels = torch.vstack(adaptation_labels).type(torch.float32)
+    if sum(positive_mask) == 1:
+        # One component was correct, so we normalize it to the correct component
+        correct_component = adaptation_labels[positive_mask]
+        desired_value = prediction[positive_mask]
+        adaptation_labels = adaptation_labels * (desired_value / correct_component)
+
+
+    # adaptation_labels = torch.vstack(adaptation_labels).type(torch.float32)
+    # adaptation_labels = adaptation_labels / np.linalg.norm(adaptation_labels)  # get unit vector for labels
+    # For labels I think we have 2 choices:
+    # 1. Anchor based on the seeded data (or seeded + data we add). So we say the highest MAV (probably within that DOF?) is 100% and normalize by that. The issue here is finding the proportional control for each DOF and combinations.
+    # 2. Assume they move quicker the further they are from the target. What do we normalize by? The screen size? Some function of the target radius and initial distance from cursor?
     adaptation_data = torch.vstack(adaptation_data).type(torch.float32)
     adaptation_direction = np.array(adaptation_direction)
     adaptation_outcome   = np.array(adaptation_outcome)
