@@ -201,6 +201,8 @@ class Config:
         return memory
 
     def prepare_model_from_sgt(self):
+        if Path(self.DC_model_file).exists():
+            return
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
         mdl = MLP(self.input_shape, self.batch_size, self.learning_rate, self.loss_function, Path(self.DC_model_file).with_name('loss.csv').as_posix(), self.DC_epochs)
