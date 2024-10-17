@@ -57,7 +57,7 @@ class Config:
                                     ["environment_output", (100, 1+2), np.float32],  # timestamp, <2 DoF optimal direction>, <2 DoF CIIL direction>
                                     ["adapt_flag", (1,1),  np.int32],
                                     ["active_flag", (1,1), np.int8],
-                                    ["memory_update_flag", (1,1), np.dtype('U10')]]
+                                    ["memory_update_flag", (1,1), np.int8]]
         for item in self.shared_memory_items:
             item.append(Lock())
 
