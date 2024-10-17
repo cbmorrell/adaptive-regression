@@ -23,7 +23,8 @@ def main():
     sgt_parser = subparsers.add_parser('sgt', description='Collect data.')
     sgt_parser.add_argument('--visualization_method', default='time', type=str, help='Visualization method before collecting data. Options are heatmap, time, or comma-separated channels (e.g., 4,8,10).')
 
-    fitts_parser = subparsers.add_parser('fitts', description='Perform Fitts task.')
+    subparsers.add_parser('fitts', description='Perform Fitts task.')
+    subparsers.add_parser('adaptation', description='Perform live adaptation.')
 
     args = parser.parse_args()
     print(args)
