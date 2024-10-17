@@ -57,13 +57,13 @@ def main():
 
     elif args.objective == 'adaptation':
         config.prepare_model_from_sgt()
-        mdl = config.load_sgt_model()
+        mdl = config.load_sgt_model(online_data_handler)
 
-        all_smi = config.shared_memory_items
         memoryProcess = Process(target = memory_manager, daemon=True, 
                                 args=
                                 (
-                                    
+                                    config.DC_data_location,
+                                    config.shared_memory_items
                                 )
         )
         memoryProcess.start()
@@ -71,9 +71,9 @@ def main():
         adaptProcess = Process(target = adapt_manager, daemon=True,
                                args=
                                (
-                                   "",
-                                   all_smi,
-                                   mdl
+                                   config.DC_data_location,
+                                   mdl,
+                                   config
                                )
         )
         adaptProcess.start()
