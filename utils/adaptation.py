@@ -237,7 +237,7 @@ def memory_manager(save_dir, shared_memory_items):
                         level=logging.INFO)
 
     smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for item in shared_memory_items:
+    for item in smi:
         smm.find_variable(*item)
 
     # initialize the memory
