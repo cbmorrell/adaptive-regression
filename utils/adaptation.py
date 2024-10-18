@@ -142,7 +142,7 @@ class Memory:
         self.experience_timestamps = obj.experience_timestamps
 
 
-def adapt_manager(save_dir, online_classifier, config):
+def adapt_manager(save_dir, emg_predictor, config):
     logging.basicConfig(filename=Path(save_dir, "adaptmanager.log"),
                         filemode='w',
                         encoding="utf-8",
@@ -162,7 +162,6 @@ def adapt_manager(save_dir, online_classifier, config):
         smm.find_variable(*item)
     # smm.find_variable('memory', (1, 1), np.dtype('U10'), Lock())
     # smm.find_variable('adapt_flag', (1, 1), np.int32, Lock())
-    emg_predictor = online_classifier.predictor
 
     # initialize the memomry
     memory = Memory()
@@ -175,7 +174,6 @@ def adapt_manager(save_dir, online_classifier, config):
     adapt_round = 0
     
     time.sleep(3)
-    done = False
     
     while time.perf_counter() - start_time < config.game_time:
         try:
@@ -206,7 +204,7 @@ def adapt_manager(save_dir, online_classifier, config):
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
                     
-                    with open(online_classifier.options['file_path'] +  'mdl' + str(adapt_round) + '.pkl', 'wb') as handle:
+                    with open(save_dir +  'mdl' + str(adapt_round) + '.pkl', 'wb') as handle:
                         pickle.dump(emg_predictor, handle)
 
                     smm.modify_variable("adapt_flag", lambda x: adapt_round)
@@ -238,7 +236,7 @@ def memory_manager(save_dir, shared_memory_items):
                         level=logging.INFO)
 
     smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for item in smi:
+    for item in shared_memory_items:
         smm.find_variable(*item)
 
     # initialize the memory
@@ -250,20 +248,26 @@ def memory_manager(save_dir, shared_memory_items):
     total_samples_written = 0
     total_samples_unfound = 0
     done=False
+    last_timestamp = 0.
 
     while not done:
         try:
             environment_data = smm.get_variable('environment_output')[0]
+            timestamp = environment_data[0]
+            if timestamp == last_timestamp:
+                continue
+            last_timestamp = timestamp
+            
 
+            # TODO: Continue if new timestamp isn't found
             # May need to handle receiving no data...
-            # Previous code also didn't allow both to happen in one loop
                 
             if np.all(environment_data == DONE_TASK):
                 done = True
                 del_t = time.perf_counter() - start_time
                 logging.info(f"MEMORYMANAGER: GOT DONE FLAG AT {del_t:.2f}s")
             else:
-                result = make_pseudo_labels(environment_data, smm)
+                result = make_pseudo_labels(environment_data, smm, approach=2)
                 if result is None:
                     total_samples_unfound += 1
                     continue
@@ -287,11 +291,16 @@ def memory_manager(save_dir, shared_memory_items):
                     smm.modify_variable('memory', lambda _: WROTE)    # tell adapt manager that it has new data
         except:
             logging.error("MEMORYMANAGER: "+traceback.format_exc())
-    
 
-def make_pseudo_labels(environment_data, smm):
+
+def project_prediction(prediction, optimal_direction):
+    return (torch.dot(prediction, optimal_direction) / torch.dot(optimal_direction, optimal_direction)) * optimal_direction
+
+
+def make_pseudo_labels(environment_data, smm, approach):
     timestamp = environment_data[0]
     optimal_direction = environment_data[1:]
+    target_radius = 40  # defined in Fitts
 
     # find the features: data - timestamps, <- features ->
     feature_data = smm.get_variable("model_input")
@@ -302,40 +311,66 @@ def make_pseudo_labels(environment_data, smm):
     
     # find the predictions info: 
     prediction_data = smm.get_variable("model_output")
-    prediction_data_index = np.where(prediction_data[:,0] == timestamp)
-    prediction = prediction_data[prediction_data_index, 1:]
+    prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
+    prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    # Designed this thinking we'd have 1 prediction here, but that doesn't seem to be the case so far
-    # NOTE: Timestamps aren't matching up for some reason, so we stop getting here...
-    outcomes = torch.tensor(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
-    # TODO: need to handle case where we're in the target...
+    if np.linalg.norm(optimal_direction) < target_radius:
+        # In the target
+        adaptation_labels = torch.tensor([0, 0])
+        outcomes = ['N', 'N']
+    else:
+        outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
+        positive_mask = outcomes == 'P'
+        if positive_mask.sum() == 0:
+            # Wrong quadrant - ignore this
+            return None
 
-    adaptation_data      = []
-    adaptation_data.append(features)
-    adaptation_direction = []
-    adaptation_direction.append(optimal_direction)
-    adaptation_outcome   = []
-    adaptation_outcome.append(outcomes)
-    timestamp = [timestamp]
+        # Convert to tensor from array
+        adaptation_labels = project_prediction(prediction, optimal_direction)
 
+        if (positive_mask.sum() == 1) and (approach == 2):
+            # Snap to component
+            adaptation_labels[~positive_mask] = 0.
 
-    # Project prediction onto optimal direction
-    adaptation_labels = (torch.dot(prediction, optimal_direction) / torch.dot(optimal_direction, optimal_direction)) * optimal_direction
-    positive_mask = torch.where(outcomes == 'P')
+        # if positive_mask.sum() == 2:
+        #     # Apply proportionality
+        #     adaptation_labels = project_prediction(prediction, optimal_direction)
 
-    if sum(positive_mask) == 1:
-        # One component was correct, so we normalize it to the correct component
-        correct_component = adaptation_labels[positive_mask]
-        desired_value = prediction[positive_mask]
-        adaptation_labels = adaptation_labels * (desired_value / correct_component)
+        #     # TODO: Propotional control based on distance (determined based on piloting subjects and seeing where subjects slow down)
+        # elif positive_mask.sum() == 1:
+        #     # Off quadrant
+        #     if approach == 1:
+        #         # Project prediction onto optimal direction
+        #         # adaptation_labels = (torch.dot(prediction, optimal_direction) / torch.dot(optimal_direction, optimal_direction)) * optimal_direction
+        #         adaptation_labels = project_prediction(prediction, optimal_direction)
 
+        #         # Removed this idea b/c it will likely mean some users will slow down since every wrong direction you're shrinking the size of the vector
+        #         # positive_mask = torch.where(outcomes == 'P')
+
+        #         # if sum(positive_mask) == 1:
+        #         #     # One component was correct, so we normalize it to the correct component
+        #         #     correct_component = adaptation_labels[positive_mask]
+        #         #     desired_value = prediction[positive_mask]
+        #         #     adaptation_labels = adaptation_labels * (desired_value / correct_component)
+
+        #     elif approach == 2:
+        #         # Snap to component
+        #         adaptation_labels = project_prediction(prediction, optimal_direction)
+        #         negative_mask = torch.where(outcomes == 'N')[0]
+        #         adaptation_labels[negative_mask] = 0.
+        #     else:
+        #         raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+        # else:
+        #     # Wrong quadrant - ignore this
+        #     return None
 
     # adaptation_labels = torch.vstack(adaptation_labels).type(torch.float32)
     # adaptation_labels = adaptation_labels / np.linalg.norm(adaptation_labels)  # get unit vector for labels
     # For labels I think we have 2 choices:
     # 1. Anchor based on the seeded data (or seeded + data we add). So we say the highest MAV (probably within that DOF?) is 100% and normalize by that. The issue here is finding the proportional control for each DOF and combinations.
     # 2. Assume they move quicker the further they are from the target. What do we normalize by? The screen size? Some function of the target radius and initial distance from cursor?
-    adaptation_data = torch.vstack(adaptation_data).type(torch.float32)
-    adaptation_direction = np.array(adaptation_direction)
-    adaptation_outcome   = np.array(adaptation_outcome)
+    timestamp = [timestamp]
+    adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
+    adaptation_direction = np.expand_dims(np.array(optimal_direction), axis=0)
+    adaptation_outcome   = np.expand_dims(np.array(outcomes), axis=0)
     return adaptation_data, adaptation_labels, adaptation_direction, adaptation_outcome, timestamp
