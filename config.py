@@ -218,14 +218,14 @@ class Config:
 
 
     def setup_live_processing(self):
-        smi = self.device.stream()
+        p, smi = self.device.stream()
         odh = libemg.data_handler.OnlineDataHandler(shared_memory_items=smi)    # can't make this a field b/c pickling will throw an error
         if self.stage != 'sgt':
             # Only want raw data during SGT
             odh.install_filter(self.fi)
         if self.log_to_file:
             odh.log_to_file(file_path=self.DC_data_location + '/')
-        return odh
+        return odh, p
 
     def start_sgt(self, online_data_handler):
         collect_data(online_data_handler, self.DC_image_location, self.DC_data_location, self.DC_reps)
