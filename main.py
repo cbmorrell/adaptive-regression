@@ -34,7 +34,7 @@ def main():
     for sm_item in config.shared_memory_items:
         smm.create_variable(*sm_item)
 
-    online_data_handler = config.setup_live_processing()
+    online_data_handler, p = config.setup_live_processing()
     if args.analyze:
         online_data_handler.analyze_hardware()
     
@@ -72,7 +72,7 @@ def main():
                                args=
                                (
                                    config.DC_data_location,
-                                   mdl,
+                                   mdl.predictor,
                                    config
                                )
         )
