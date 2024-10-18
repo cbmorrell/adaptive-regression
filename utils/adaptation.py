@@ -20,7 +20,8 @@ class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
     def __init__(self, controller: libemg.environments.controllers.Controller, prediction_map: dict | None = None, num_circles: int = 30, num_trials: int = 15, dwell_time: float = 3, timeout: float = 30, velocity: float = 25, save_file: str | None = None, width: int = 1250, height: int = 750, fps: int = 60, proportional_control: bool = True):
         super().__init__(controller, prediction_map, num_circles, num_trials, dwell_time, timeout, velocity, save_file, width, height, fps, proportional_control)
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
-        self.smm.find_variable('environment_output', (100, 3), np.float32, Lock())
+        # TODO: WE MAKE A NEW LOCK HERE, SO MAYBE THIS IS WHY WE'RE HAVING ISSUES
+        self.smm.find_variable('environment_output', (100, 3), np.double, Lock())
 
     def _log(self, label, timestamp):
         # Write to log_dictionary
@@ -29,7 +30,7 @@ class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
         # Want to send the timestamp and the optimal direction
         optimal_direction = np.array(self.log_dictionary['goal_circle'][-1]) - np.array(self.log_dictionary['cursor_position'][-1])
         optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
-        output = np.array([timestamp, optimal_direction[0], optimal_direction[1]], dtype=np.float32)
+        output = np.array([timestamp, optimal_direction[0], optimal_direction[1]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
 
     def run(self):
