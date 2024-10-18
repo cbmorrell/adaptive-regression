@@ -84,13 +84,10 @@ class Device:
         self.fs = fs
         self.streamer = streamer
         self.num_channels = num_channels
-        self.p = None
 
     def stream(self):
-        self.p, smi = self.streamer()
-        return smi
-
-
+        p, smi = self.streamer()
+        return p, smi
 
 
 def cleanup_hardware(p):
