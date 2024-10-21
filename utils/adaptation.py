@@ -17,11 +17,12 @@ DONE_TASK = -1000
 
 
 class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
-    def __init__(self, controller: libemg.environments.controllers.Controller, prediction_map: dict | None = None, num_circles: int = 30, num_trials: int = 15, dwell_time: float = 3, timeout: float = 30, velocity: float = 25, save_file: str | None = None, width: int = 1250, height: int = 750, fps: int = 60, proportional_control: bool = True):
-        super().__init__(controller, prediction_map, num_circles, num_trials, dwell_time, timeout, velocity, save_file, width, height, fps, proportional_control)
+    def __init__(self, shared_memory_items, controller: libemg.environments.controllers.Controller, num_circles: int = 30, num_trials: int = 15, dwell_time: float = 3, save_file: str | None = None,
+                  fps: int = 60):
+        super().__init__(controller, num_circles=num_circles, num_trials=num_trials, dwell_time=dwell_time, save_file=save_file, fps=fps)
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
-        # TODO: WE MAKE A NEW LOCK HERE, SO MAYBE THIS IS WHY WE'RE HAVING ISSUES
-        self.smm.find_variable('environment_output', (100, 3), np.double, Lock())
+        for sm_item in shared_memory_items:
+            self.smm.create_variable(*sm_item)
 
     def _log(self, label, timestamp):
         # Write to log_dictionary
