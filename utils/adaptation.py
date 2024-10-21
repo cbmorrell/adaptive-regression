@@ -119,7 +119,7 @@ class Memory:
                 self.experience_timestamps = [self.experience_timestamps[i] for i in unshuffle_ids]
 
     def write(self, save_dir, num_written=""):
-        with open(save_dir + f'classifier_memory_{num_written}.pkl', 'wb') as handle:
+        with open(Path(save_dir, f"classifier_memory_{num_written}.pkl"), 'wb') as handle:
             pickle.dump(self, handle)
     
     def read(self, save_dir):
@@ -133,7 +133,7 @@ class Memory:
             self.experience_timestamps = loaded_content.experience_timestamps
     
     def from_file(self, save_dir, memory_id):
-        with open(save_dir + f'classifier_memory_{memory_id}.pkl', 'rb') as handle:
+        with open(Path(save_dir, f"classifier_memory_{memory_id}.pkl"), 'rb') as handle:
             obj = pickle.load(handle)
         self.experience_targets = obj.experience_targets
         self.experience_data    = obj.experience_data
@@ -148,24 +148,14 @@ def adapt_manager(save_dir, emg_predictor, config):
                         filemode='w',
                         encoding="utf-8",
                         level=logging.INFO)
-    # this is where we receive commands from the memoryManager
-    # in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # in_sock.bind(("localhost", in_port))
 
-    # this is where we write commands to the memoryManger
-    # managers only own their input sockets
-    # out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # out_sock.bind(("localhost", out_port))
-
-    # shared_memory_items = online_classifier.smi
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for item in config.shared_memory_items:
         smm.find_variable(*item)
-    # smm.find_variable('memory', (1, 1), np.dtype('U10'), Lock())
-    # smm.find_variable('adapt_flag', (1, 1), np.int32, Lock())
 
     # initialize the memomry
     memory = Memory()
+    # memory = config.offdh_to_memory()
     memory_id = 0
 
     # initial time
@@ -178,7 +168,7 @@ def adapt_manager(save_dir, emg_predictor, config):
     
     while time.perf_counter() - start_time < config.game_time:
         try:
-            data = smm.get_variable('memory_update_flag')
+            data = smm.get_variable('memory_update_flag')[0, 0]
             if data == WROTE:
                 # we were signalled we have data to load
                 # append this data to our memory
@@ -199,13 +189,13 @@ def adapt_manager(save_dir, emg_predictor, config):
                 logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
             else:
                 # abstract decoders/fake abstract decoder/sgt
-                if config.adaptation:
+                if config.model_is_adaptive:
                     t1 = time.perf_counter()
                     emg_predictor.model.adapt(memory)
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
                     
-                    with open(save_dir +  'mdl' + str(adapt_round) + '.pkl', 'wb') as handle:
+                    with open(Path(save_dir, 'mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
                         pickle.dump(emg_predictor, handle)
 
                     smm.modify_variable("adapt_flag", lambda x: adapt_round)
@@ -246,9 +236,8 @@ def memory_manager(save_dir, shared_memory_items):
     start_time = time.perf_counter()
 
     num_written = 0
-    total_samples_written = 0
     total_samples_unfound = 0
-    done=False
+    done = False
     last_timestamp = 0.
 
     while not done:
@@ -256,13 +245,10 @@ def memory_manager(save_dir, shared_memory_items):
             environment_data = smm.get_variable('environment_output')[0]
             timestamp = environment_data[0]
             if timestamp == last_timestamp:
+                # No new data has been received
                 continue
             last_timestamp = timestamp
             
-
-            # TODO: Continue if new timestamp isn't found
-            # May need to handle receiving no data...
-                
             if np.all(environment_data == DONE_TASK):
                 done = True
                 del_t = time.perf_counter() - start_time
@@ -275,9 +261,9 @@ def memory_manager(save_dir, shared_memory_items):
                 adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp = result 
                 if (adaptation_data.shape[0]) != (adaptation_labels.shape[0]):
                     continue
-                memory.add_memories(adaptation_data, adaptation_labels, adaptation_direction,adaptation_type, timestamp)
+                memory.add_memories(adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp)
 
-            memory_data = smm.get_variable('memory_update_flag')
+            memory_data = smm.get_variable('memory_update_flag')[0, 0]
 
             if memory_data == WAITING:
                 # write memory to file
@@ -288,14 +274,13 @@ def memory_manager(save_dir, shared_memory_items):
                     logging.info(f"MEMORYMANAGER: WROTE FILE: {num_written},\t lines:{len(memory)},\t unfound: {total_samples_unfound},\t WRITE TIME: {del_t:.2f}s")
                     num_written += 1
                     memory = Memory()
-                    # in_sock.sendto("WROTE".encode("utf-8"), ("localhost", out_port))
-                    smm.modify_variable('memory', lambda _: WROTE)    # tell adapt manager that it has new data
+                    smm.modify_variable('memory_update_flag', lambda _: WROTE)    # tell adapt manager that it has new data
         except:
             logging.error("MEMORYMANAGER: "+traceback.format_exc())
 
 
 def project_prediction(prediction, optimal_direction):
-    return (torch.dot(prediction, optimal_direction) / torch.dot(optimal_direction, optimal_direction)) * optimal_direction
+    return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
 
 
 def make_pseudo_labels(environment_data, smm, approach):
@@ -317,7 +302,7 @@ def make_pseudo_labels(environment_data, smm, approach):
 
     if np.linalg.norm(optimal_direction) < target_radius:
         # In the target
-        adaptation_labels = torch.tensor([0, 0])
+        adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
     else:
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
@@ -331,6 +316,7 @@ def make_pseudo_labels(environment_data, smm, approach):
 
         if (positive_mask.sum() == 1) and (approach == 2):
             # Snap to component
+            adaptation_labels[positive_mask] = np.linalg.norm(prediction)
             adaptation_labels[~positive_mask] = 0.
 
         # if positive_mask.sum() == 2:
@@ -371,6 +357,7 @@ def make_pseudo_labels(environment_data, smm, approach):
     # 1. Anchor based on the seeded data (or seeded + data we add). So we say the highest MAV (probably within that DOF?) is 100% and normalize by that. The issue here is finding the proportional control for each DOF and combinations.
     # 2. Assume they move quicker the further they are from the target. What do we normalize by? The screen size? Some function of the target radius and initial distance from cursor?
     timestamp = [timestamp]
+    adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
     adaptation_direction = np.expand_dims(np.array(optimal_direction), axis=0)
     adaptation_outcome   = np.expand_dims(np.array(outcomes), axis=0)
