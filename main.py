@@ -1,7 +1,5 @@
 import argparse
 from pathlib import Path
-from copy import deepcopy
-from multiprocessing import Lock
 
 import libemg
 import numpy as np
@@ -81,7 +79,7 @@ def main():
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
-        isofitts = AdaptationIsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
+        isofitts = AdaptationIsoFitts(config.shared_memory_items, controller, num_circles=8, num_trials=20, dwell_time=1.0,
                                                            save_file=Path(config.DC_model_file).with_name('AD_fitts.pkl').as_posix())
         isofitts.run()
 
