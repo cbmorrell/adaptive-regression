@@ -27,6 +27,7 @@ class Config:
         self.get_model_parameters()
         self.get_training_hyperparameters()
         self.get_adaptation_parameters()
+        self.get_game_parameters()
 
     @property
     def model_is_adaptive(self):
@@ -100,7 +101,7 @@ class Config:
         self.visualize_training = False
     
     def get_game_parameters(self):
-        self.game_time = 600
+        self.game_time = 300
 
     def load_sgt_model(self, online_data_handler):
         if self.stage != 'adaptation':
