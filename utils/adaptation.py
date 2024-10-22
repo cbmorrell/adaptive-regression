@@ -293,7 +293,7 @@ def make_pseudo_labels(environment_data, smm, approach):
     # find the features: data - timestamps, <- features ->
     feature_data = smm.get_variable("model_input")
     feature_data_index = np.where(feature_data[:,0] == timestamp)
-    features = torch.tensor(feature_data[feature_data_index,1:].squeeze())
+    features = np.array(feature_data[feature_data_index,1:].squeeze())
     if len(feature_data_index[0]) == 0:
         return None
     
@@ -306,20 +306,35 @@ def make_pseudo_labels(environment_data, smm, approach):
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
+        print(adaptation_labels)
     else:
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
         positive_mask = outcomes == 'P'
-        if positive_mask.sum() == 0:
+        num_positive_components = positive_mask.sum()
+        if num_positive_components == 2:
+            # Correct quadrant
+            adaptation_labels = project_prediction(prediction, optimal_direction)
+        elif num_positive_components == 1:
+            # Off quadrant - one component is correct
+            adaptation_labels = np.zeros_like(prediction)
+            if approach == 2:
+                # adaptation_labels[positive_mask] = np.linalg.norm(prediction) * np.sign(prediction[positive_mask])
+                adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
+                adaptation_labels[~positive_mask] = 0.
+            else:
+                raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+        else:
             # Wrong quadrant - ignore this
             return None
 
-        # Convert to tensor from array
-        adaptation_labels = project_prediction(prediction, optimal_direction)
+        adaptation_labels *= np.linalg.norm(prediction) / np.linalg.norm(adaptation_labels) # ensure label has the same magnitude as the prediction
+        print(positive_mask, prediction, adaptation_labels)
+        # adaptation_labels = project_prediction(prediction, optimal_direction)
 
-        if (positive_mask.sum() == 1) and (approach == 2):
-            # Snap to component
-            adaptation_labels[positive_mask] = np.linalg.norm(prediction)
-            adaptation_labels[~positive_mask] = 0.
+        # if (positive_mask.sum() == 1) and (approach == 2):
+        #     # Snap to component
+        #     adaptation_labels[positive_mask] = np.linalg.norm(prediction)
+        #     adaptation_labels[~positive_mask] = 0.
 
         # if positive_mask.sum() == 2:
         #     # Apply proportionality
