@@ -157,6 +157,7 @@ def adapt_manager(save_dir, emg_predictor, config):
     memory = Memory()
     # memory = config.offdh_to_memory()
     memory_id = 0
+    num_memories = 0
 
     # initial time
     start_time = time.perf_counter()
@@ -187,8 +188,9 @@ def adapt_manager(save_dir, emg_predictor, config):
                 time.sleep(3)
                 del_t = time.perf_counter() - t1
                 logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
-            else:
+            elif num_memories != len(memory):
                 # abstract decoders/fake abstract decoder/sgt
+                num_memories = len(memory)
                 if config.model_is_adaptive:
                     t1 = time.perf_counter()
                     emg_predictor.model.adapt(memory)
@@ -207,7 +209,7 @@ def adapt_manager(save_dir, emg_predictor, config):
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
                     adapt_round += 1
-            
+
             # signal to the memory manager we are idle and waiting for data
             smm.modify_variable('memory_update_flag', lambda _: WAITING)
             logging.info("ADAPTMANAGER: WAITING FOR DATA")
