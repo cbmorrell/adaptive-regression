@@ -290,10 +290,14 @@ def project_prediction(prediction, optimal_direction):
     return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
 
 
-def distance_to_proportional_control(optimal_direction):
-    # result = np.sqrt(np.linalg.norm(optimal_direction / 800))
-    result = 0.2 + (0.8 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250))))
-    return min(1, result)
+def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
+    if method == 'sqrt':
+        result = np.sqrt(np.linalg.norm(optimal_direction / 400))
+    elif method == 'sigmoid':
+        result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250))))
+    else:
+        raise ValueError(f"Unexpected value for method. Got: {method}.")
+    return min(1, result)   # bound result to 1
 
 
 def make_pseudo_labels(environment_data, smm, approach):
