@@ -13,7 +13,7 @@ import libemg
 
 WAITING = 0
 WROTE = 1
-DONE_TASK = -1000
+DONE_TASK = -10
 
 
 class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
@@ -33,10 +33,11 @@ class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
         optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
         output = np.array([timestamp, optimal_direction[0], optimal_direction[1]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
+        if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
+            self.done = True
 
     def run(self):
         super().run()
-        self.smm.modify_variable('environment_output', lambda x: np.vstack((np.array([DONE_TASK, DONE_TASK, DONE_TASK]), x))[:x.shape[0]])
 
 
 class Memory:
@@ -167,7 +168,7 @@ def adapt_manager(save_dir, emg_predictor, config):
     
     time.sleep(3)
     
-    while time.perf_counter() - start_time < config.game_time:
+    while (time.perf_counter() - start_time) < config.game_time:
         try:
             data = smm.get_variable('memory_update_flag')[0, 0]
             if data == WROTE:
@@ -218,7 +219,10 @@ def adapt_manager(save_dir, emg_predictor, config):
             logging.error("ADAPTMANAGER: "+traceback.format_exc())
     else:
         print("AdaptManager Finished!")
+        smm.modify_variable('memory_update_flag', lambda _: DONE_TASK)
         memory.write(save_dir, 1000)
+        with open(Path(save_dir, 'ad_mdl.pkl'), 'wb') as handle:
+            pickle.dump(emg_predictor, handle)
 
 
 
@@ -239,11 +243,18 @@ def memory_manager(save_dir, shared_memory_items):
 
     num_written = 0
     total_samples_unfound = 0
-    done = False
     last_timestamp = 0.
 
-    while not done:
+    while True:
         try:
+            memory_data = smm.get_variable('memory_update_flag')[0, 0]
+
+            if memory_data == DONE_TASK:
+                # Task is complete
+                del_t = time.perf_counter() - start_time
+                logging.info(f"MEMORYMANAGER: GOT DONE FLAG AT {del_t:.2f}s")
+                break
+
             environment_data = smm.get_variable('environment_output')[0]
             timestamp = environment_data[0]
             if timestamp == last_timestamp:
@@ -251,21 +262,14 @@ def memory_manager(save_dir, shared_memory_items):
                 continue
             last_timestamp = timestamp
             
-            if np.all(environment_data == DONE_TASK):
-                done = True
-                del_t = time.perf_counter() - start_time
-                logging.info(f"MEMORYMANAGER: GOT DONE FLAG AT {del_t:.2f}s")
-            else:
-                result = make_pseudo_labels(environment_data, smm, approach=2)
-                if result is None:
-                    total_samples_unfound += 1
-                    continue
-                adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp = result 
-                if (adaptation_data.shape[0]) != (adaptation_labels.shape[0]):
-                    continue
-                memory.add_memories(adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp)
-
-            memory_data = smm.get_variable('memory_update_flag')[0, 0]
+            result = make_pseudo_labels(environment_data, smm, approach=2)
+            if result is None:
+                total_samples_unfound += 1
+                continue
+            adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp = result 
+            if (adaptation_data.shape[0]) != (adaptation_labels.shape[0]):
+                continue
+            memory.add_memories(adaptation_data, adaptation_labels, adaptation_direction, adaptation_type, timestamp)
 
             if memory_data == WAITING:
                 # write memory to file
@@ -279,10 +283,17 @@ def memory_manager(save_dir, shared_memory_items):
                     smm.modify_variable('memory_update_flag', lambda _: WROTE)    # tell adapt manager that it has new data
         except:
             logging.error("MEMORYMANAGER: "+traceback.format_exc())
+    print('memory_manager finished!')
 
 
 def project_prediction(prediction, optimal_direction):
     return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
+
+
+def distance_to_proportional_control(optimal_direction):
+    # result = np.sqrt(np.linalg.norm(optimal_direction / 800))
+    result = 0.2 + (0.8 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250))))
+    return min(1, result)
 
 
 def make_pseudo_labels(environment_data, smm, approach):
@@ -302,34 +313,35 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    if np.linalg.norm(optimal_direction) < target_radius:
-        # In the target
+    in_target = np.linalg.norm(optimal_direction) < target_radius
+    outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
+    positive_mask = outcomes == 'P'
+    num_positive_components = positive_mask.sum()
+
+    if in_target and num_positive_components != 2:
+        # In the target, but predicting the wrong direction
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
-        print(adaptation_labels)
-    else:
-        outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
-        positive_mask = outcomes == 'P'
-        num_positive_components = positive_mask.sum()
-        if num_positive_components == 2:
-            # Correct quadrant
-            adaptation_labels = project_prediction(prediction, optimal_direction)
-        elif num_positive_components == 1:
-            # Off quadrant - one component is correct
-            adaptation_labels = np.zeros_like(prediction)
-            if approach == 2:
-                # adaptation_labels[positive_mask] = np.linalg.norm(prediction) * np.sign(prediction[positive_mask])
-                adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
-                adaptation_labels[~positive_mask] = 0.
-            else:
-                raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+    elif num_positive_components == 2:
+        # Correct quadrant
+        adaptation_labels = project_prediction(prediction, optimal_direction)
+    elif num_positive_components == 1:
+        # Off quadrant - one component is correct
+        adaptation_labels = np.zeros_like(prediction)
+        if approach == 2:
+            # adaptation_labels[positive_mask] = np.linalg.norm(prediction) * np.sign(prediction[positive_mask])
+            adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
+            adaptation_labels[~positive_mask] = 0.
         else:
-            # Wrong quadrant - ignore this
-            return None
+            raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+    else:
+        # Wrong quadrant - ignore this
+        return None
 
-        adaptation_labels *= np.linalg.norm(prediction) / np.linalg.norm(adaptation_labels) # ensure label has the same magnitude as the prediction
-        print(positive_mask, prediction, adaptation_labels)
-        # adaptation_labels = project_prediction(prediction, optimal_direction)
+    # adaptation_labels *= np.linalg.norm(prediction) / np.linalg.norm(adaptation_labels) # ensure label has the same magnitude as the prediction
+    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels)    # ensure label has magnitude based on distance
+    print(positive_mask, prediction, adaptation_labels)
+    # adaptation_labels = project_prediction(prediction, optimal_direction)
 
         # if (positive_mask.sum() == 1) and (approach == 2):
         #     # Snap to component
