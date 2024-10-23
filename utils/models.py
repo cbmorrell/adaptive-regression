@@ -455,20 +455,19 @@ class MLP(nn.Module):
 
     def setup_net(self):
         self.net = nn.Sequential(
-            nn.Linear(self.input_shape, 32),
+            nn.Linear(self.input_shape, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(64,32),
             nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(32,16),
-            nn.BatchNorm1d(16),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(16, 10),
+            nn.Linear(32, 10),
             nn.BatchNorm1d(10),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(10,2),
-            nn.Tanh()
+            nn.Linear(10,2)
         )
     
     def setup_optimizer(self):
@@ -476,6 +475,8 @@ class MLP(nn.Module):
         self.optimizer_classifier = optim.Adam(self.net.parameters(), lr=self.learning_rate)
         if self.loss_type == "MSELoss":
             self.loss_function = nn.MSELoss()
+        elif self.loss_type == 'L1':
+            self.loss_function = nn.L1Loss()
         else:
             raise ValueError(f"Unexpected value for loss_function. Got: {self.loss_function}.")
         
@@ -488,8 +489,6 @@ class MLP(nn.Module):
     
     def predict(self, data):
         return self.predict_proba(data)
-        # probs = self.predict_proba(data)
-        # return np.array([np.where(p==np.max(p))[0][0] for p in probs])
 
     def predict_proba(self,data):
         if type(data) == np.ndarray:
