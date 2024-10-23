@@ -291,7 +291,7 @@ def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
     if method == 'sqrt':
         result = np.sqrt(np.linalg.norm(optimal_direction / 400))
     elif method == 'sigmoid':
-        result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250))))
+        result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))
     else:
         raise ValueError(f"Unexpected value for method. Got: {method}.")
     return min(1, result)   # bound result to 1
