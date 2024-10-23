@@ -36,9 +36,6 @@ class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
         if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
             self.done = True
 
-    def run(self):
-        super().run()
-
 
 class Memory:
     def __init__(self, max_len=None):
