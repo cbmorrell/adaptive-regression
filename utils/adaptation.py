@@ -313,35 +313,36 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    in_target = np.linalg.norm(optimal_direction) < target_radius
-    outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
-    positive_mask = outcomes == 'P'
-    num_positive_components = positive_mask.sum()
 
-    if in_target and num_positive_components != 2:
-        # In the target, but predicting the wrong direction
+    if np.linalg.norm(optimal_direction) < target_radius:
+        # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
-    elif num_positive_components == 2:
-        # Correct quadrant
-        adaptation_labels = project_prediction(prediction, optimal_direction)
-    elif num_positive_components == 1:
-        # Off quadrant - one component is correct
-        adaptation_labels = np.zeros_like(prediction)
-        if approach == 2:
-            # adaptation_labels[positive_mask] = np.linalg.norm(prediction) * np.sign(prediction[positive_mask])
-            adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
-            adaptation_labels[~positive_mask] = 0.
-        else:
-            raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+        print(adaptation_labels)
     else:
-        # Wrong quadrant - ignore this
-        return None
+        outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
+        positive_mask = outcomes == 'P'
+        num_positive_components = positive_mask.sum()
+        if num_positive_components == 2:
+            # Correct quadrant
+            adaptation_labels = project_prediction(prediction, optimal_direction)
+        elif num_positive_components == 1:
+            # Off quadrant - one component is correct
+            adaptation_labels = np.zeros_like(prediction)
+            if approach == 2:
+                # adaptation_labels[positive_mask] = np.linalg.norm(prediction) * np.sign(prediction[positive_mask])
+                adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
+                adaptation_labels[~positive_mask] = 0.
+            else:
+                raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+        else:
+            # Wrong quadrant - ignore this
+            return None
 
-    # adaptation_labels *= np.linalg.norm(prediction) / np.linalg.norm(adaptation_labels) # ensure label has the same magnitude as the prediction
-    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels)    # ensure label has magnitude based on distance
-    print(positive_mask, prediction, adaptation_labels)
-    # adaptation_labels = project_prediction(prediction, optimal_direction)
+        # adaptation_labels *= np.linalg.norm(prediction) / np.linalg.norm(adaptation_labels) # ensure label has the same magnitude as the prediction
+        adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels)    # ensure label has magnitude based on distance
+        print(positive_mask, prediction, adaptation_labels)
+        # adaptation_labels = project_prediction(prediction, optimal_direction)
 
         # if (positive_mask.sum() == 1) and (approach == 2):
         #     # Snap to component
