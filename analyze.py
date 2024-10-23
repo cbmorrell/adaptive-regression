@@ -1,7 +1,9 @@
 import math
+import pickle
 
 import numpy as np
-from libemg.environments import RegressorController
+import matplotlib.pyplot as plt
+from libemg.environments.controllers import RegressorController
 
 
 def in_circle(cursor, circle):
@@ -119,3 +121,25 @@ def extract_fitts_metrics(run_log):
     fitts_results['efficiency'] = calculate_efficiency(run_log)
     fitts_results['throughput'] = calculate_throughput(run_log)
     return fitts_results
+
+
+def main():
+    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-001/within-ciil/AD_fitts.pkl', 'rb') as f:
+        fitts_data = pickle.load(f)
+
+    predictions = np.linalg.norm(fitts_data['current_direction'], axis=1) / 25
+    target_positions = np.array(fitts_data['goal_circle'])[:, :2]
+    cursor_positions = np.array(fitts_data['cursor_position'])[:, :2]
+    distances = np.linalg.norm(target_positions - cursor_positions, axis=1)
+
+    plt.scatter(distances, predictions)
+    plt.show()
+
+    
+
+
+    print('-------------Analyze complete!-------------')
+
+
+if __name__ == '__main__':
+    main()
