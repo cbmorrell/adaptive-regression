@@ -21,8 +21,8 @@ def main():
     sgt_parser = subparsers.add_parser('sgt', description='Collect data.')
     sgt_parser.add_argument('--visualization_method', default='time', type=str, help='Visualization method before collecting data. Options are heatmap, time, or comma-separated channels (e.g., 4,8,10).')
 
-    subparsers.add_parser('fitts', description='Perform Fitts task.')
     subparsers.add_parser('adaptation', description='Perform live adaptation.')
+    subparsers.add_parser('validation', description='Perform Fitts task.')
 
     args = parser.parse_args()
     print(args)
@@ -55,7 +55,7 @@ def main():
 
     elif args.objective == 'adaptation':
         config.prepare_model_from_sgt()
-        mdl = config.load_sgt_model(online_data_handler)
+        mdl = config.setup_online_model(online_data_handler, 'adaptation')
 
         memoryProcess = Process(target = memory_manager, daemon=True, 
                                 args=
@@ -79,13 +79,13 @@ def main():
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
-        isofitts = AdaptationIsoFitts(config.shared_memory_items, controller, num_circles=8, num_trials=20, dwell_time=1.0,
+        isofitts = AdaptationIsoFitts(config.shared_memory_items, controller, num_circles=8, num_trials=200, dwell_time=2.0,
                                                            save_file=Path(config.DC_model_file).with_name('AD_fitts.pkl').as_posix())
         isofitts.run()
 
-    elif args.objective == 'fitts':
+    elif args.objective == 'validation':
         # assume we have a model from the adaptation phase (whether it was not adapted or adapted)
-        mdl = config.load_adaptation_model(online_data_handler)
+        mdl = config.setup_online_model(online_data_handler, 'validation')
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()
