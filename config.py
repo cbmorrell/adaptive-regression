@@ -62,19 +62,6 @@ class Config:
         for item in self.shared_memory_items:
             item.append(Lock())
 
-        if self.model_is_adaptive:
-            self.model_name       = "MLP"
-            self.negative_method  = "mixed"
-            self.loss_function    = "MSELoss"
-            self.relabel_method   = "LabelSpreading"
-            self.initialization   = "SGT"
-        else:
-            self.model_name       = "MLP"
-            self.negative_method  = "mixed"
-            self.loss_function    = "MSELoss"
-            self.relabel_method   = None
-            self.initialization   = "SGT"
-    
     def get_feature_parameters(self):
         self.features = ["WENG"]
         # self.feature_dictionary = {"WENG_fs": 1500}
@@ -103,17 +90,20 @@ class Config:
     def get_game_parameters(self):
         self.game_time = 300
 
-    def load_sgt_model(self, online_data_handler):
-        if self.stage != 'adaptation':
-            raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
+    def setup_online_model(self, online_data_handler, model_type):
+        if self.stage == 'sgt':
+            raise ValueError(f"Tried to setup online model when stage is set to 'sgt'.")
 
-        with open(self.DC_model_file, 'rb') as handle:
+        if model_type == 'adaptation':
+            model_file = self.DC_model_file
+        elif model_type == 'validation':
+            model_file = self.AD_model_file
+        else:
+            raise ValueError(f"Unexpected value for model_type. Got: {model_type}.")
+
+        with open(model_file, 'rb') as handle:
             loaded_mdl = pickle.load(handle)
     
-        # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
-        feature_list = self.features
-
-
         if self.model_is_adaptive:
             smm = True
             smi = [
@@ -123,49 +113,19 @@ class Config:
         else:
             smm = False
             smi = None
-        model = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
-                                                                window_size=self.window_length,
-                                                                window_increment=self.window_increment,
-                                                                online_data_handler=online_data_handler,
-                                                                features=feature_list,
-                                                                file_path=Path(self.DC_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
-                                                                file=True,
-                                                                smm=smm,
-                                                                smm_items=smi,
-                                                                std_out=False)
-        model.predictor.model.net.eval()
-        model.run(block=False)
-        return model
-    
-    def load_adaptation_model(self, online_data_handler):
-        if self.stage != 'fitts':
-            raise ValueError(f"Tried to setup model when stage isn't set to 'fitts'. Got: {self.stage}.")
 
-        with open(self.AD_model_file, 'rb') as handle:
-            loaded_mdl = pickle.load(handle)
-    
-        # offline_classifier.__setattr__("feature_params", loaded_mdl.feature_params)
-        feature_list = self.features
-
-        if self.model_is_adaptive:
-            smm = True
-            smi = [
-                ['model_input', (100, 1 + (8 * self.device.num_channels)), np.double], # timestamp <- features ->
-                ['model_output', (100, 3), np.double]  # timestamp, prediction 1, prediction 2... (assumes 2 DOFs)
-            ]
-        else:
-            smm = False
-            smi = None
-        model = libemg.emg_predictor.OnlineEMGRegressor(offline_regressor=loaded_mdl,
-                                                                window_size=self.window_length,
-                                                                window_increment=self.window_increment,
-                                                                online_data_handler=online_data_handler,
-                                                                features=feature_list,
-                                                                file_path=Path(self.DC_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
-                                                                file=True,
-                                                                smm=smm,
-                                                                smm_items=smi,
-                                                                std_out=False)
+        model = libemg.emg_predictor.OnlineEMGRegressor(
+            offline_regressor=loaded_mdl,
+            window_size=self.window_length,
+            window_increment=self.window_increment,
+            online_data_handler=online_data_handler,
+            features=self.features,
+            file_path=Path(self.DC_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
+            file=True,
+            smm=smm,
+            smm_items=smi,
+            std_out=False
+        )
         model.predictor.model.net.eval()
         model.run(block=False)
         return model
