@@ -52,7 +52,7 @@ class Config:
             self.log_to_file = True
 
     def get_model_parameters(self):
-        self.oc_output_format = "probabilities"
+        self.loss_function = 'L1'
         self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, <DOFs>
                                     ["model_input", (100,1+self.input_shape), np.double], # timestamp, <- features ->
                                     ["environment_output", (100, 1+2), np.double],  # timestamp, <2 DoF optimal direction>, <2 DoF CIIL direction>
