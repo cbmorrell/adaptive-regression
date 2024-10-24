@@ -8,10 +8,9 @@ from multiprocessing import Process
 
 from config import Config
 
-# -> python stream.py sifi collect Data/subject1000/ images/ abduct-adduct-flexion-extension 5
 def main():
     # CLI arguments
-    parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.', usage='python main.py sifi data/subject1000 sgt images')
+    parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.', usage='python main.py sifi subject-001 within-sgt sgt')
     parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
     parser.add_argument('subject_id', type=str, help='Subject ID.')
     parser.add_argument('model', type=str, choices=('within-sgt', 'combined-sgt', 'within-ciil', 'combined-ciil'), help='Model type.')
