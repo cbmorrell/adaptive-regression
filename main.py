@@ -53,7 +53,6 @@ def main():
         config.start_sgt(online_data_handler)
 
     elif args.objective == 'adaptation':
-        config.prepare_model_from_sgt()
         mdl = config.setup_online_model(online_data_handler, 'adaptation')
 
         memoryProcess = Process(target = memory_manager, daemon=True, 
