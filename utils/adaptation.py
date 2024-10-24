@@ -73,7 +73,15 @@ class Memory:
                 self.memories_stored += other_memory.memories_stored
         return self
         
-    def add_memories(self, experience_data, experience_targets, experience_context=[], experience_outcome=[], experience_timestamps=[]):
+    def add_memories(self, experience_data, experience_targets, experience_context = None, experience_outcome = None, experience_timestamps = None):
+        # Add information from SGT data (if needed)
+        if experience_context is None:
+            experience_context = np.full_like(experience_targets, -2000)
+        if experience_outcome is None:
+            experience_outcome = np.full_like(experience_targets, 'N', dtype=str)
+        if experience_timestamps is None:
+            experience_timestamps = [-1 for _ in range(experience_targets.shape[0])]
+
         if len(experience_targets):
             if not len(self):
                 self.experience_targets = experience_targets
@@ -152,8 +160,7 @@ def adapt_manager(save_dir, emg_predictor, config):
         smm.find_variable(*item)
 
     # initialize the memomry
-    memory = Memory()
-    # memory = config.offdh_to_memory()
+    memory = config.offdh_to_memory()
     memory_id = 0
     num_memories = 0
 
