@@ -434,14 +434,12 @@ class Transformer(nn.Module):
 
 from sklearn.decomposition import PCA
 class MLP(nn.Module):
-    def __init__(self, input_shape, batch_size, lr, loss_type, loss_file, num_epochs):
+    def __init__(self, input_shape, batch_size, lr, loss_type, loss_file):
         super(MLP, self).__init__()
         self.input_shape = input_shape
         self.learning_rate = lr
         self.loss_type = loss_type
         self.loss_file = loss_file
-        self.num_epochs = num_epochs
-        self.net = None
 
         self.foreground_device = "cpu"
         self.train_device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -498,11 +496,11 @@ class MLP(nn.Module):
         return output.detach().numpy()
 
 
-    def fit(self, shuffle_every_epoch=True, memory=None):
+    def fit(self, num_epochs, shuffle_every_epoch=True, memory=None):
         self.net.to(self.train_device)
         num_batch = len(memory) // self.batch_size
         losses = []
-        for e in range(self.num_epochs):
+        for e in range(num_epochs):
             t = time.time()
             if shuffle_every_epoch:
                 memory.shuffle()
@@ -525,10 +523,10 @@ class MLP(nn.Module):
                     f.writelines([str(t) + "," + str(i) + "\n" for i in loss])
         self.net.to(self.foreground_device)
 
-    def adapt(self, memory, filename = None):
+    def adapt(self, memory, num_epochs, filename = None):
         self.net.to(self.train_device)
         self.train()
-        self.fit(memory=memory)
+        self.fit(num_epochs, memory=memory)
         if filename is not None:
             self.visualize(memory=memory, filename=filename)
         self.net.to(self.foreground_device)
