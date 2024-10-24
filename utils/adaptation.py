@@ -198,7 +198,7 @@ def adapt_manager(save_dir, emg_predictor, config):
                 num_memories = len(memory)
                 if config.model_is_adaptive:
                     t1 = time.perf_counter()
-                    emg_predictor.model.adapt(memory)
+                    emg_predictor.model.adapt(memory, num_epochs=config.adaptation_epochs)
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
                     
@@ -295,8 +295,9 @@ def project_prediction(prediction, optimal_direction):
 
 
 def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
+    # NOTE: These mappings were decided based on piloting
     if method == 'sqrt':
-        result = np.sqrt(np.linalg.norm(optimal_direction / 400))
+        result = np.sqrt(np.linalg.norm(optimal_direction / 400))   # normalizing by half of distance between targets
     elif method == 'sigmoid':
         result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))
     else:
@@ -322,17 +323,21 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
 
-    if np.linalg.norm(optimal_direction) < target_radius:
+    if np.linalg.norm(optimal_direction) < (target_radius / 1):
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
-        print(adaptation_labels)
+        # NOTE: This approach works, but it's a bit naive.
+        # We're providing it data that is 0, but the user likely doesn't stop right on the target's edge. I think this is causing some drift.
+        # Then once it drifts, you often try to approach the target from a certain angle, so it'll drift into the target. This is bad too b/c you aren't moving, but you're telling the model you should be going towards the target.
+        # We could probably do something else naive and say that the user is comfortable giving half the radius as a buffer, but that's kind of random.
+        
     else:
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
         positive_mask = outcomes == 'P'
         num_positive_components = positive_mask.sum()
         if num_positive_components == 2:
-            # Correct quadrant
+            # Correct quadrant - project prediction onto optimal direction
             adaptation_labels = project_prediction(prediction, optimal_direction)
         elif num_positive_components == 1:
             # Off quadrant - one component is correct
@@ -346,6 +351,7 @@ def make_pseudo_labels(environment_data, smm, approach):
             # Wrong quadrant - ignore this
             return None
 
+        # TODO: Right now we're saying that your norm is a max of 1. This means that you can't go as quickly along the diagonal as you can in 1 direction. Should fix this. Maybe bound to 1 if you're moving in isolation, otherwise 1.41?
         adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels)    # ensure label has magnitude based on distance
         # print(positive_mask, prediction, adaptation_labels)
 

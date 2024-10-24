@@ -94,6 +94,8 @@ class Config:
         if self.stage == 'sgt':
             raise ValueError(f"Tried to setup online model when stage is set to 'sgt'.")
 
+        self.prepare_model_from_sgt()
+
         if model_type == 'adaptation':
             model_file = self.DC_model_file
         elif model_type == 'validation':
@@ -166,9 +168,9 @@ class Config:
             return
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
-        mdl = MLP(self.input_shape, self.batch_size, self.learning_rate, self.loss_function, Path(self.DC_model_file).with_name('loss.csv').as_posix(), self.DC_epochs)
+        mdl = MLP(self.input_shape, self.batch_size, self.learning_rate, self.loss_function, Path(self.DC_model_file).with_name('loss.csv').as_posix())
         print('Fitting model...')
-        mdl.fit(shuffle_every_epoch=True, memory=sgt_memory)
+        mdl.fit(num_epochs=self.DC_epochs, shuffle_every_epoch=True, memory=sgt_memory)
         # install mdl and thresholds to EMGClassifier
         offline_regressor = libemg.emg_predictor.EMGRegressor(mdl)
         
