@@ -338,7 +338,6 @@ def make_pseudo_labels(environment_data, smm, approach):
             # Off quadrant - one component is correct
             adaptation_labels = np.zeros_like(prediction)
             if approach == 2:
-                # adaptation_labels[positive_mask] = np.linalg.norm(prediction) * np.sign(prediction[positive_mask])
                 adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
                 adaptation_labels[~positive_mask] = 0.
             else:
@@ -347,50 +346,9 @@ def make_pseudo_labels(environment_data, smm, approach):
             # Wrong quadrant - ignore this
             return None
 
-        # adaptation_labels *= np.linalg.norm(prediction) / np.linalg.norm(adaptation_labels) # ensure label has the same magnitude as the prediction
         adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels)    # ensure label has magnitude based on distance
-        print(positive_mask, prediction, adaptation_labels)
-        # adaptation_labels = project_prediction(prediction, optimal_direction)
+        # print(positive_mask, prediction, adaptation_labels)
 
-        # if (positive_mask.sum() == 1) and (approach == 2):
-        #     # Snap to component
-        #     adaptation_labels[positive_mask] = np.linalg.norm(prediction)
-        #     adaptation_labels[~positive_mask] = 0.
-
-        # if positive_mask.sum() == 2:
-        #     # Apply proportionality
-        #     adaptation_labels = project_prediction(prediction, optimal_direction)
-
-        #     # TODO: Propotional control based on distance (determined based on piloting subjects and seeing where subjects slow down)
-        # elif positive_mask.sum() == 1:
-        #     # Off quadrant
-        #     if approach == 1:
-        #         # Project prediction onto optimal direction
-        #         # adaptation_labels = (torch.dot(prediction, optimal_direction) / torch.dot(optimal_direction, optimal_direction)) * optimal_direction
-        #         adaptation_labels = project_prediction(prediction, optimal_direction)
-
-        #         # Removed this idea b/c it will likely mean some users will slow down since every wrong direction you're shrinking the size of the vector
-        #         # positive_mask = torch.where(outcomes == 'P')
-
-        #         # if sum(positive_mask) == 1:
-        #         #     # One component was correct, so we normalize it to the correct component
-        #         #     correct_component = adaptation_labels[positive_mask]
-        #         #     desired_value = prediction[positive_mask]
-        #         #     adaptation_labels = adaptation_labels * (desired_value / correct_component)
-
-        #     elif approach == 2:
-        #         # Snap to component
-        #         adaptation_labels = project_prediction(prediction, optimal_direction)
-        #         negative_mask = torch.where(outcomes == 'N')[0]
-        #         adaptation_labels[negative_mask] = 0.
-        #     else:
-        #         raise ValueError(f"Unexpected value for approach. Got: {approach}.")
-        # else:
-        #     # Wrong quadrant - ignore this
-        #     return None
-
-    # adaptation_labels = torch.vstack(adaptation_labels).type(torch.float32)
-    # adaptation_labels = adaptation_labels / np.linalg.norm(adaptation_labels)  # get unit vector for labels
     # For labels I think we have 2 choices:
     # 1. Anchor based on the seeded data (or seeded + data we add). So we say the highest MAV (probably within that DOF?) is 100% and normalize by that. The issue here is finding the proportional control for each DOF and combinations.
     # 2. Assume they move quicker the further they are from the target. What do we normalize by? The screen size? Some function of the target radius and initial distance from cursor?
