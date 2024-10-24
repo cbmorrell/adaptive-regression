@@ -337,8 +337,8 @@ def make_pseudo_labels(environment_data, smm, approach):
         positive_mask = outcomes == 'P'
         num_positive_components = positive_mask.sum()
         if num_positive_components == 2:
-            # Correct quadrant - project prediction onto optimal direction
-            adaptation_labels = project_prediction(prediction, optimal_direction)
+            # Correct quadrant - point prediction to optimal direction (later normalized to correct magnitude)
+            adaptation_labels = np.copy(optimal_direction)
         elif num_positive_components == 1:
             # Off quadrant - one component is correct
             adaptation_labels = np.zeros_like(prediction)
@@ -351,13 +351,11 @@ def make_pseudo_labels(environment_data, smm, approach):
             # Wrong quadrant - ignore this
             return None
 
-        # TODO: Right now we're saying that your norm is a max of 1. This means that you can't go as quickly along the diagonal as you can in 1 direction. Should fix this. Maybe bound to 1 if you're moving in isolation, otherwise 1.41?
-        adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels)    # ensure label has magnitude based on distance
+        # Normalize to correct magnitude
+        # p = inf b/c (1, 1) should move the same speed as (1, 0)
+        adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
         # print(positive_mask, prediction, adaptation_labels)
 
-    # For labels I think we have 2 choices:
-    # 1. Anchor based on the seeded data (or seeded + data we add). So we say the highest MAV (probably within that DOF?) is 100% and normalize by that. The issue here is finding the proportional control for each DOF and combinations.
-    # 2. Assume they move quicker the further they are from the target. What do we normalize by? The screen size? Some function of the target radius and initial distance from cursor?
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
