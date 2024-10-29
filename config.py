@@ -9,7 +9,7 @@ import torch
 
 from utils.models import MLP
 from utils.adaptation import Memory
-from utils.data_collection import Device, collect_data
+from utils.data_collection import Device, collect_data, make_collection_videos
 
 class Config:
     def __init__(self, subject_id: str, model: str, stage: str, device: str):
@@ -88,7 +88,8 @@ class Config:
         self.visualize_training = False
     
     def get_game_parameters(self):
-        self.game_time = 300
+        # self.game_time = 300
+        self.game_time = 240
 
     def setup_online_model(self, online_data_handler, model_type):
         if self.stage == 'sgt':
@@ -135,7 +136,7 @@ class Config:
     def load_sgt_data(self):
         # parse offline data into an offline data handler
         package_function = lambda x, y: Path(x).parent == Path(y).parent
-        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter(self.DC_data_location + '/', ".txt", ["labels"], "labels"), package_function)]
+        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/', ".txt", ["labels"], "labels"), package_function)]
             
         offdh = libemg.data_handler.OfflineDataHandler()
         regex_filters = [
@@ -191,4 +192,5 @@ class Config:
         return odh, p
 
     def start_sgt(self, online_data_handler):
+        make_collection_videos()
         collect_data(online_data_handler, self.DC_image_location, self.DC_data_location, self.DC_reps)
