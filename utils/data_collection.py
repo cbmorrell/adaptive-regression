@@ -95,3 +95,51 @@ def cleanup_hardware(p):
     p.signal.set()
     time.sleep(3)
     print("Clean-up finished.")
+
+
+def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_time=5, FPS=24):
+    import math
+    coordinates = []
+    duration = int(cycles*period + rest_time)
+    t = np.linspace(0, duration-rest_time, FPS*(duration-rest_time))
+    cycle = np.sin(2*math.pi*(1/period)*t)
+    coordinates.append(cycle)
+    coordinates.append(np.zeros(FPS*rest_time))
+
+    coordinates = np.concatenate(coordinates)
+    if movement_type == 'within':
+        dof1 = np.vstack((coordinates, np.zeros_like(coordinates))).T
+        dof2 = np.vstack((np.zeros_like(coordinates), coordinates)).T
+    elif movement_type == 'combined':
+        dof1 = np.vstack((coordinates, coordinates)).T
+        dof2 = np.vstack((coordinates, -coordinates)).T
+    else:
+        raise ValueError(f"Unexpected value for movement_type. Got: {movement_type}.")
+    final_coordinates = np.vstack((dof1, dof2)) 
+    return final_coordinates
+
+def make_collection_videos():
+    libemg.gui.GUI(None).download_gestures([2, 3, 6, 7], 'images')
+    gestures = ["Hand_Open", "Hand_Close", "Pronation", "Supination"]
+    pictures = {}
+    for g in gestures:
+        pictures[g] = Image.open(f"images/{g}.png")
+    animator = libemg.animator.ScatterPlotAnimator(output_filepath=Path('images', 'within.mp4').absolute().as_posix(),
+                                                    axis_images={"N":pictures["Supination"],
+                                                                "E":pictures["Hand_Open"],
+                                                                "S":pictures["Pronation"],
+                                                                "W":pictures["Hand_Close"]},
+                                                    show_direction=True,
+                                                    show_countdown=True)
+    coordinates = get_frame_coordinates(movement_type='within')
+    animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
+
+    animator = libemg.animator.ScatterPlotAnimator(output_filepath=Path('images', 'combined.mp4').absolute().as_posix(),
+                                                    axis_images={"N":pictures["Supination"],
+                                                                "E":pictures["Hand_Open"],
+                                                                "S":pictures["Pronation"],
+                                                                "W":pictures["Hand_Close"]},
+                                                    show_direction=True,
+                                                    show_countdown=True)
+    coordinates = get_frame_coordinates(movement_type='within')
+    animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
