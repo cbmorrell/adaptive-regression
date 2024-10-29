@@ -124,20 +124,36 @@ def extract_fitts_metrics(run_log):
 
 
 def main():
-    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-001/within-ciil/AD_fitts.pkl', 'rb') as f:
-        fitts_data = pickle.load(f)
+    with open('/Users/cmorrell/Code/adaptive-regression/data/1-rep/combined-ciil/VAL_fitts.pkl', 'rb') as f:
+        ciil_data = pickle.load(f)
 
-    predictions = np.linalg.norm(fitts_data['current_direction'], axis=1) / 25
-    target_positions = np.array(fitts_data['goal_circle'])[:, :2]
-    cursor_positions = np.array(fitts_data['cursor_position'])[:, :2]
+    predictions = np.linalg.norm(ciil_data['current_direction'], axis=1) / 25
+    target_positions = np.array(ciil_data['goal_circle'])[:, :2]
+    cursor_positions = np.array(ciil_data['cursor_position'])[:, :2]
     distances = np.linalg.norm(target_positions - cursor_positions, axis=1)
 
+    plt.figure()
     plt.scatter(distances, predictions)
-    plt.show()
-
     
+    ciil_results = extract_fitts_metrics(ciil_data)
 
 
+    with open('/Users/cmorrell/Code/adaptive-regression/data/1-rep/combined-sgt/VAL_fitts.pkl', 'rb') as f:
+        sgt_data = pickle.load(f)
+
+    sgt_results = extract_fitts_metrics(sgt_data)
+
+
+    fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(10, 6), layout='constrained')
+    axs[0].bar(['ciil', 'sgt'], [ciil_results['throughput'], sgt_results['throughput']])
+    axs[1].bar(['ciil', 'sgt'], [ciil_results['efficiency'], sgt_results['efficiency']])
+    axs[2].bar(['ciil', 'sgt'], [ciil_results['overshoots'], sgt_results['overshoots']])
+
+    axs[0].set_ylabel('Throughput')
+    axs[1].set_ylabel('Path Efficiency')
+    axs[2].set_ylabel('Overshoots')
+
+    plt.show()
     print('-------------Analyze complete!-------------')
 
 
