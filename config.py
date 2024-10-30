@@ -3,13 +3,13 @@ from multiprocessing import Lock
 
 import libemg
 import numpy as np
-import os
 import pickle
 import torch
+from PIL import Image
 
 from utils.models import MLP
 from utils.adaptation import Memory
-from utils.data_collection import Device, collect_data, make_collection_videos
+from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 class Config:
     def __init__(self, subject_id: str, model: str, stage: str, device: str):
@@ -72,7 +72,8 @@ class Config:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
-        self.DC_image_location = "images/abduct-adduct-flexion-extension/"
+        self.DC_animation_location = 'animation'
+        self.DC_image_location = 'images/'
         self.DC_data_location = Path('data', self.subject_id, self.model).absolute().as_posix()
         self.DC_reps           = 5
         self.DC_epochs         = 150
@@ -192,5 +193,29 @@ class Config:
         return odh, p
 
     def start_sgt(self, online_data_handler):
-        make_collection_videos()
-        collect_data(online_data_handler, self.DC_image_location, self.DC_data_location, self.DC_reps)
+        self.make_collection_video('within')
+        self.make_collection_video('combined')
+        collect_data(online_data_handler, self.DC_animation_location, self.DC_data_location, self.DC_reps)
+
+    def make_collection_video(self, video):
+        libemg.gui.GUI(None).download_gestures([2, 3, 6, 7], self.DC_image_location)
+        gestures = ["Hand_Open", "Hand_Close", "Pronation", "Supination"]
+        pictures = {}
+        for g in gestures:
+            pictures[g] = Image.open(Path(self.DC_image_location, f"{g}.png"))
+
+        filepath = Path(self.DC_animation_location, f"{video}.mp4").absolute()
+        if filepath.exists():
+            return
+
+        print(f"Creating {video} collection video...")
+        filepath.mkdir(parents=True, exist_ok=True)
+        animator = libemg.animator.ScatterPlotAnimator(output_filepath=filepath.as_posix(),
+                                                        axis_images={"N":pictures["Supination"],
+                                                                    "E":pictures["Hand_Open"],
+                                                                    "S":pictures["Pronation"],
+                                                                    "W":pictures["Hand_Close"]},
+                                                        show_direction=True,
+                                                        show_countdown=True)
+        coordinates = get_frame_coordinates(movement_type=video)
+        animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
