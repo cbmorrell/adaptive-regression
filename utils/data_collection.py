@@ -1,12 +1,8 @@
 from pathlib import Path
-import shutil
 import time
-import os
 
 import libemg
-import cv2 as cv
 import numpy as np
-from PIL import Image
 
 
 def collect_data(online_data_handler, media_folder, data_folder, num_reps):
@@ -22,29 +18,16 @@ def collect_data(online_data_handler, media_folder, data_folder, num_reps):
                 print(f'Skipping {data_folder}.')
                 return
     
-    # Calculate rep time from video (maybe add this to libemg?)
-    media_file = Path(media_folder, 'collection.mp4').absolute()
-    assert media_file.exists(), f"Media file {media_file} does not exist."
-    video = cv.VideoCapture(media_file.as_posix())
-    fps = 24
-    rep_time = video.get(cv.CAP_PROP_FRAME_COUNT) / fps
-    
-    # Copy labels file to data directory
-    labels_file = Path(media_folder, 'collection.txt').absolute().as_posix()
-    shutil.copy(labels_file, Path(data_folder, 'labels.txt').absolute().as_posix())
-    
     # Create GUI
     args = {
         "media_folder"         : media_folder,
         "data_folder"          : data_folder,
         "num_reps"             : num_reps,
-        "rep_time"             : rep_time,
         "rest_time"            : 1,
-        "auto_advance"         : True,
+        "auto_advance"         : False,
     }
     gui = libemg.gui.GUI(online_data_handler, args=args, debug=False, gesture_width=500, gesture_height=500)
     gui.start_gui()
-    # TODO: Maybe add check to make sure that data is still being read (only returning the same value over across all channels)
 
 
 def append_to_file(filename, data):
@@ -117,29 +100,3 @@ def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_ti
         raise ValueError(f"Unexpected value for movement_type. Got: {movement_type}.")
     final_coordinates = np.vstack((dof1, dof2)) 
     return final_coordinates
-
-def make_collection_videos():
-    libemg.gui.GUI(None).download_gestures([2, 3, 6, 7], 'images')
-    gestures = ["Hand_Open", "Hand_Close", "Pronation", "Supination"]
-    pictures = {}
-    for g in gestures:
-        pictures[g] = Image.open(f"images/{g}.png")
-    animator = libemg.animator.ScatterPlotAnimator(output_filepath=Path('images', 'within.mp4').absolute().as_posix(),
-                                                    axis_images={"N":pictures["Supination"],
-                                                                "E":pictures["Hand_Open"],
-                                                                "S":pictures["Pronation"],
-                                                                "W":pictures["Hand_Close"]},
-                                                    show_direction=True,
-                                                    show_countdown=True)
-    coordinates = get_frame_coordinates(movement_type='within')
-    animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
-
-    animator = libemg.animator.ScatterPlotAnimator(output_filepath=Path('images', 'combined.mp4').absolute().as_posix(),
-                                                    axis_images={"N":pictures["Supination"],
-                                                                "E":pictures["Hand_Open"],
-                                                                "S":pictures["Pronation"],
-                                                                "W":pictures["Hand_Close"]},
-                                                    show_direction=True,
-                                                    show_countdown=True)
-    coordinates = get_frame_coordinates(movement_type='within')
-    animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
