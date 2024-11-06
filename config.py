@@ -33,7 +33,7 @@ class Config:
     def model_is_adaptive(self):
         if self.model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
             return False
-        elif self.model in ['within-ciil', 'combined-ciil']: # sgt adaptation
+        elif self.model in ['ciil', 'oracle']: # sgt adaptation
             return True
         else:
             raise ValueError(f"Unexpected value for self.model. Got: {self.model}.")
