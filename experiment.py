@@ -11,7 +11,7 @@ from utils.models import MLP
 from utils.adaptation import Memory
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
-class Config:
+class Experiment:
     def __init__(self, subject_id: str, model: str, stage: str, device: str):
         # usb towards the hand
         self.subject_id = subject_id

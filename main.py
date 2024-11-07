@@ -6,7 +6,7 @@ import numpy as np
 from utils.adaptation import memory_manager, adapt_manager, AdaptationIsoFitts
 from multiprocessing import Process
 
-from config import Config
+from experiment import Experiment
 
 def main():
     # CLI arguments
@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    config = Config(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
+    config = Experiment(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for sm_item in config.shared_memory_items:
         smm.create_variable(*sm_item)
