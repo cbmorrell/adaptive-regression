@@ -26,12 +26,12 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    config = Experiment(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
+    experiment = Experiment(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
-    for sm_item in config.shared_memory_items:
+    for sm_item in experiment.shared_memory_items:
         smm.create_variable(*sm_item)
 
-    online_data_handler, p = config.setup_live_processing()
+    online_data_handler, p = experiment.setup_live_processing()
     if args.analyze:
         online_data_handler.analyze_hardware()
     
@@ -41,25 +41,25 @@ def main():
         if method == 'heatmap':
             # Assume EMaGer
             remap_function = lambda x: np.reshape(x, (x.shape[0], 4, 16))
-            online_data_handler.visualize_heatmap(num_samples=config.device.fs, remap_function=remap_function, feature_list=['MAV', 'RMS'])
+            online_data_handler.visualize_heatmap(num_samples=experiment.device.fs, remap_function=remap_function, feature_list=['MAV', 'RMS'])
         elif method == 'time':
-            online_data_handler.visualize(num_samples=config.device.fs, block=True)
+            online_data_handler.visualize(num_samples=experiment.device.fs, block=True)
         else:
             # Passed in list of channels
             channels = method.replace(' ', '').split(',')
             channels = list(map(int, channels))
-            online_data_handler.visualize_channels(channels, num_samples=config.device.fs)
+            online_data_handler.visualize_channels(channels, num_samples=experiment.device.fs)
 
-        config.start_sgt(online_data_handler)
+        experiment.start_sgt(online_data_handler)
 
     elif args.objective == 'adaptation':
-        mdl = config.setup_online_model(online_data_handler, 'adaptation')
+        mdl = experiment.setup_online_model(online_data_handler, 'adaptation')
 
         memoryProcess = Process(target = memory_manager, daemon=True, 
                                 args=
                                 (
-                                    config.DC_data_location,
-                                    config.shared_memory_items
+                                    experiment.DC_data_location,
+                                    experiment.shared_memory_items
                                 )
         )
         memoryProcess.start()
@@ -67,9 +67,9 @@ def main():
         adaptProcess = Process(target = adapt_manager, daemon=True,
                                args=
                                (
-                                   config.DC_data_location,
+                                   experiment.DC_data_location,
                                    mdl.predictor,
-                                   config
+                                   experiment
                                )
         )
         adaptProcess.start()
@@ -77,18 +77,18 @@ def main():
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
-        isofitts = AdaptationIsoFitts(config.shared_memory_items, controller, num_circles=8, num_trials=200, dwell_time=2.0,
-                                                           save_file=Path(config.DC_model_file).with_name('AD_fitts.pkl').as_posix())
+        isofitts = AdaptationIsoFitts(experiment.shared_memory_items, controller, num_circles=8, num_trials=200, dwell_time=2.0,
+                                                           save_file=Path(experiment.DC_model_file).with_name('AD_fitts.pkl').as_posix())
         isofitts.run()
 
     elif args.objective == 'validation':
         # assume we have a model from the adaptation phase (whether it was not adapted or adapted)
-        mdl = config.setup_online_model(online_data_handler, 'validation')
+        mdl = experiment.setup_online_model(online_data_handler, 'validation')
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()
         isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
-                                                           save_file=Path(config.DC_model_file).with_name('VAL_fitts.pkl').as_posix())
+                                                           save_file=Path(experiment.DC_model_file).with_name('VAL_fitts.pkl').as_posix())
         isofitts.run()
 
     print('------------------Main script complete------------------')
