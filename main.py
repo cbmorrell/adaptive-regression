@@ -54,26 +54,7 @@ def main():
 
     elif args.objective == 'adaptation':
         mdl = experiment.setup_online_model(online_data_handler, 'adaptation')
-
-        memoryProcess = Process(target = memory_manager, daemon=True, 
-                                args=
-                                (
-                                    experiment.DC_data_location,
-                                    experiment.shared_memory_items
-                                )
-        )
-        memoryProcess.start()
-
-        adaptProcess = Process(target = adapt_manager, daemon=True,
-                               args=
-                               (
-                                   experiment.DC_data_location,
-                                   mdl.predictor,
-                                   experiment
-                               )
-        )
-        adaptProcess.start()
-
+        experiment.start_adapting(mdl.predictor)
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
