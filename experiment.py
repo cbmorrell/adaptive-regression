@@ -1,3 +1,4 @@
+import shutil
 import time
 from pathlib import Path
 from multiprocessing import Lock, Process
@@ -103,10 +104,15 @@ class Experiment:
 
         if model_type == 'adaptation':
             model_file = self.DC_model_file
+            previous_stage = 'sgt'
         elif model_type == 'validation':
             model_file = self.AD_model_file
+            previous_stage = 'adaptation'
         else:
             raise ValueError(f"Unexpected value for model_type. Got: {model_type}.")
+
+        if not Path(model_file).exists():
+            raise FileNotFoundError(f"{model_file} not found. Please run {previous_stage} first.")
 
         with open(model_file, 'rb') as handle:
             loaded_mdl = pickle.load(handle)
@@ -224,6 +230,12 @@ class Experiment:
         animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
 
     def start_adapting(self, emg_predictor):
+        if not self.model_is_adaptive and not Path(self.AD_model_file).exists():
+            # Model should not be adapted, so we save the SGT model as the adapted model
+            shutil.copy(self.DC_model_file, self.AD_model_file)
+            print(f"Model {self.model} should not be adapted - copied SGT model ({self.DC_model_file}) to adaptive model ({self.AD_model_file}).")
+            return
+
         memoryProcess = Process(target=self._memory_manager, daemon=True)
         memoryProcess.start()
 
