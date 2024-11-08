@@ -76,21 +76,20 @@ class Experiment:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
-        self.DC_animation_location = 'animation'
-        self.DC_image_location = 'images/'
-        self.DC_data_location = Path('data', self.subject_id, self.model).absolute().as_posix()
-        self.DC_reps           = 5
-        self.DC_epochs         = 150
-        self.DC_model_file = Path(self.DC_data_location, 'sgt_mdl.pkl').absolute().as_posix()
+        self.animation_location = 'animation'
+        self.image_location = 'images/'
+        self.data_directory = Path('data', self.subject_id, self.model).absolute().as_posix()
+        self.num_reps = 5
+        self.num_train_epochs = 150
+        self.sgt_model_file = Path(self.data_directory, 'sgt_mdl.pkl').absolute().as_posix()
 
     def get_adaptation_parameters(self):
-        self.AD_model_file = Path(self.DC_data_location, 'ad_mdl.pkl').absolute().as_posix()
+        self.adaptation_model_file = Path(self.data_directory, 'ad_mdl.pkl').absolute().as_posix()
+        self.num_adaptation_epochs = 5
 
     def get_training_hyperparameters(self):
         self.batch_size = 64
         self.learning_rate = 2e-3
-        self.adaptation_epochs = 5
-        self.visualize_training = False
     
     def get_game_parameters(self):
         # self.game_time = 300
@@ -103,10 +102,10 @@ class Experiment:
         self.prepare_model_from_sgt()
 
         if model_type == 'adaptation':
-            model_file = self.DC_model_file
+            model_file = self.sgt_model_file
             previous_stage = 'sgt'
         elif model_type == 'validation':
-            model_file = self.AD_model_file
+            model_file = self.adaptation_model_file
             previous_stage = 'adaptation'
         else:
             raise ValueError(f"Unexpected value for model_type. Got: {model_type}.")
@@ -133,7 +132,7 @@ class Experiment:
             window_increment=self.window_increment,
             online_data_handler=online_data_handler,
             features=self.features,
-            file_path=Path(self.DC_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
+            file_path=Path(self.sgt_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
             file=True,
             smm=smm,
             smm_items=smi,
@@ -154,7 +153,7 @@ class Experiment:
             libemg.data_handler.RegexFilter("/", "/",[str(self.subject_id)], "subjects"),
             libemg.data_handler.RegexFilter('/', '/', [self.model], 'model_data')
         ]
-        offdh.get_data(self.DC_data_location, regex_filters, metadata_fetchers, ",")
+        offdh.get_data(self.data_directory, regex_filters, metadata_fetchers, ",")
         return offdh
 
     def offdh_to_memory(self):
@@ -175,19 +174,19 @@ class Experiment:
         return memory
 
     def prepare_model_from_sgt(self):
-        if Path(self.DC_model_file).exists():
+        if Path(self.sgt_model_file).exists():
             return
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
-        mdl = MLP(self.input_shape, self.batch_size, self.learning_rate, self.loss_function, Path(self.DC_model_file).with_name('loss.csv').as_posix())
+        mdl = MLP(self.input_shape, self.batch_size, self.learning_rate, self.loss_function, Path(self.sgt_model_file).with_name('loss.csv').as_posix())
         print('Fitting model...')
-        mdl.fit(num_epochs=self.DC_epochs, shuffle_every_epoch=True, memory=sgt_memory)
+        mdl.fit(num_epochs=self.num_train_epochs, shuffle_every_epoch=True, memory=sgt_memory)
         # install mdl and thresholds to EMGClassifier
         offline_regressor = libemg.emg_predictor.EMGRegressor(mdl)
         
         # offline_classifier.__setattr__("feature_params", config.feature_dictionary)
         # save EMGClassifier to file
-        with open(self.DC_model_file, 'wb') as handle:
+        with open(self.sgt_model_file, 'wb') as handle:
             pickle.dump(offline_regressor, handle)
 
 
@@ -198,22 +197,22 @@ class Experiment:
             # Only want raw data during SGT
             odh.install_filter(self.fi)
         if self.log_to_file:
-            odh.log_to_file(file_path=self.DC_data_location + '/')
+            odh.log_to_file(file_path=self.data_directory + '/')
         return odh, p
 
     def start_sgt(self, online_data_handler):
         self.make_collection_video('within')
         self.make_collection_video('combined')
-        collect_data(online_data_handler, self.DC_animation_location, self.DC_data_location, self.DC_reps)
+        collect_data(online_data_handler, self.animation_location, self.data_directory, self.num_reps)
 
     def make_collection_video(self, video):
-        libemg.gui.GUI(None).download_gestures([2, 3, 6, 7], self.DC_image_location)
+        libemg.gui.GUI(None).download_gestures([2, 3, 6, 7], self.image_location)
         gestures = ["Hand_Open", "Hand_Close", "Pronation", "Supination"]
         pictures = {}
         for g in gestures:
-            pictures[g] = Image.open(Path(self.DC_image_location, f"{g}.png"))
+            pictures[g] = Image.open(Path(self.image_location, f"{g}.png"))
 
-        filepath = Path(self.DC_animation_location, f"{video}.mp4").absolute()
+        filepath = Path(self.animation_location, f"{video}.mp4").absolute()
         if filepath.exists():
             return
 
@@ -230,10 +229,10 @@ class Experiment:
         animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
 
     def start_adapting(self, emg_predictor):
-        if not self.model_is_adaptive and not Path(self.AD_model_file).exists():
+        if not self.model_is_adaptive and not Path(self.adaptation_model_file).exists():
             # Model should not be adapted, so we save the SGT model as the adapted model
-            shutil.copy(self.DC_model_file, self.AD_model_file)
-            print(f"Model {self.model} should not be adapted - copied SGT model ({self.DC_model_file}) to adaptive model ({self.AD_model_file}).")
+            shutil.copy(self.sgt_model_file, self.adaptation_model_file)
+            print(f"Model {self.model} should not be adapted - copied SGT model ({self.sgt_model_file}) to adaptive model ({self.adaptation_model_file}).")
             return
 
         memoryProcess = Process(target=self._memory_manager, daemon=True)
@@ -245,7 +244,7 @@ class Experiment:
     def _adapt_manager(self, emg_predictor):
         if not self.model_is_adaptive:
             raise ValueError(f"Model {self.model} should not be adapted.")
-        logging.basicConfig(filename=Path(self.DC_data_location, "adaptmanager.log"),
+        logging.basicConfig(filename=Path(self.data_directory, "adaptmanager.log"),
                             filemode='w',
                             encoding="utf-8",
                             level=logging.INFO)
@@ -275,7 +274,7 @@ class Experiment:
                     # append this data to our memory
                     t1 = time.perf_counter()
                     new_memory = Memory()
-                    new_memory.from_file(self.DC_data_location, memory_id)
+                    new_memory.from_file(self.data_directory, memory_id)
                     print(f"Loaded {memory_id} memory")
                     memory += new_memory
                     del_t = time.perf_counter() - t1
@@ -292,11 +291,11 @@ class Experiment:
                     # abstract decoders/fake abstract decoder/sgt
                     num_memories = len(memory)
                     t1 = time.perf_counter()
-                    emg_predictor.model.adapt(memory, num_epochs=self.adaptation_epochs)
+                    emg_predictor.model.adapt(memory, num_epochs=self.num_adaptation_epochs)
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
                     
-                    with open(Path(self.DC_data_location, 'mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
+                    with open(Path(self.data_directory, 'mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
                         pickle.dump(emg_predictor, handle)
 
                     smm.modify_variable("adapt_flag", lambda x: adapt_round)
@@ -312,12 +311,12 @@ class Experiment:
         else:
             print("AdaptManager Finished!")
             smm.modify_variable('memory_update_flag', lambda _: DONE_TASK)
-            memory.write(self.DC_data_location, 1000)
-            with open(Path(self.DC_data_location, 'ad_mdl.pkl'), 'wb') as handle:
+            memory.write(self.data_directory, 1000)
+            with open(Path(self.data_directory, 'ad_mdl.pkl'), 'wb') as handle:
                 pickle.dump(emg_predictor, handle)
 
     def _memory_manager(self):
-        logging.basicConfig(filename=Path(self.DC_data_location, "memorymanager.log"),
+        logging.basicConfig(filename=Path(self.data_directory, "memorymanager.log"),
                             filemode='w',
                             encoding="utf-8",
                             level=logging.INFO)
@@ -365,7 +364,7 @@ class Experiment:
                     # write memory to file
                     if len(memory):# never write an empty memory
                         t1 = time.perf_counter()
-                        memory.write(self.DC_data_location, num_written)
+                        memory.write(self.data_directory, num_written)
                         del_t = time.perf_counter() - t1
                         logging.info(f"MEMORYMANAGER: WROTE FILE: {num_written},\t lines:{len(memory)},\t unfound: {total_samples_unfound},\t WRITE TIME: {del_t:.2f}s")
                         num_written += 1
