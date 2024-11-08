@@ -243,6 +243,8 @@ class Experiment:
         adaptProcess.start()
 
     def _adapt_manager(self, emg_predictor):
+        if not self.model_is_adaptive:
+            raise ValueError(f"Model {self.model} should not be adapted.")
         logging.basicConfig(filename=Path(self.DC_data_location, "adaptmanager.log"),
                             filemode='w',
                             encoding="utf-8",
@@ -289,24 +291,17 @@ class Experiment:
                 elif num_memories != len(memory):
                     # abstract decoders/fake abstract decoder/sgt
                     num_memories = len(memory)
-                    if self.model_is_adaptive:
-                        t1 = time.perf_counter()
-                        emg_predictor.model.adapt(memory, num_epochs=self.adaptation_epochs)
-                        del_t = time.perf_counter() - t1
-                        logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
-                        
-                        with open(Path(self.DC_data_location, 'mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
-                            pickle.dump(emg_predictor, handle)
+                    t1 = time.perf_counter()
+                    emg_predictor.model.adapt(memory, num_epochs=self.adaptation_epochs)
+                    del_t = time.perf_counter() - t1
+                    logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
+                    
+                    with open(Path(self.DC_data_location, 'mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
+                        pickle.dump(emg_predictor, handle)
 
-                        smm.modify_variable("adapt_flag", lambda x: adapt_round)
-                        print(f"Adapted {adapt_round} times")
-                        adapt_round += 1
-                    else:
-                        t1 = time.perf_counter()
-                        time.sleep(5)
-                        del_t = time.perf_counter() - t1
-                        logging.info(f"ADAPTMANAGER: WAITING - round {adapt_round}; \tWAIT TIME: {del_t:.2f}s")
-                        adapt_round += 1
+                    smm.modify_variable("adapt_flag", lambda x: adapt_round)
+                    print(f"Adapted {adapt_round} times")
+                    adapt_round += 1
 
                 # signal to the memory manager we are idle and waiting for data
                 smm.modify_variable('memory_update_flag', lambda _: WAITING)
