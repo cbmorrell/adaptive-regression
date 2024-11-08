@@ -196,10 +196,13 @@ def make_pseudo_labels(environment_data, smm, approach):
             adaptation_labels = np.copy(optimal_direction)
         elif num_positive_components == 1:
             # Off quadrant - one component is correct
-            adaptation_labels = np.zeros_like(prediction)
-            if approach == 2:
+            if approach == 'ciil':
+                adaptation_labels = np.zeros_like(prediction)
                 adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
                 adaptation_labels[~positive_mask] = 0.
+            elif approach == 'oracle':
+                adaptation_labels = project_prediction(prediction, optimal_direction)
+                # TODO: Decide if we normalize to the magnitude of the prediction here or do distance to prop control for both approaches
             else:
                 raise ValueError(f"Unexpected value for approach. Got: {approach}.")
         else:

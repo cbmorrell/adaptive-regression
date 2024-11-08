@@ -352,7 +352,7 @@ class Experiment:
                     continue
                 last_timestamp = timestamp
                 
-                result = make_pseudo_labels(environment_data, smm, approach=2)
+                result = make_pseudo_labels(environment_data, smm, approach=self.model)
                 if result is None:
                     total_samples_unfound += 1
                     continue
