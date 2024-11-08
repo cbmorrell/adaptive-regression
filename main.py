@@ -3,7 +3,7 @@ from pathlib import Path
 
 import libemg
 import numpy as np
-from utils.adaptation import memory_manager, adapt_manager, AdaptationIsoFitts
+from utils.adaptation import AdaptationIsoFitts
 from multiprocessing import Process
 
 from experiment import Experiment
