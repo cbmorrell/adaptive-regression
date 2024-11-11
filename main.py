@@ -13,7 +13,6 @@ def main():
     parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.', usage='python main.py sifi subject-001 within-sgt sgt')
     parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
     parser.add_argument('subject_id', type=str, help='Subject ID.')
-    parser.add_argument('model', type=str, choices=('within-sgt', 'combined-sgt', 'ciil', 'oracle'), help='Model type.')
     parser.add_argument('--analyze', action='store_true', help='Flag to call analyze_hardware() method.')
     subparsers = parser.add_subparsers(description='Streaming objectives.', dest='objective', required=True)
 
@@ -26,7 +25,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    experiment = Experiment(subject_id=args.subject_id, model=args.model, stage=args.objective, device=args.device)
+    experiment = Experiment(subject_id=args.subject_id, stage=args.objective, device=args.device)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for sm_item in experiment.shared_memory_items:
         smm.create_variable(*sm_item)

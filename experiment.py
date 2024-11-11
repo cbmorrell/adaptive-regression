@@ -15,15 +15,33 @@ from utils.models import MLP
 from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
+# Balanced latin square for 4 conditions
+LATIN_SQUARE = np.array([
+    [0, 1, 2, 3],
+    [1, 2, 0, 3],
+    [2, 3, 1, 0],
+    [3, 0, 2, 1]
+])
+
 class Experiment:
-    def __init__(self, subject_id: str, model: str, stage: str, device: str):
+    def __init__(self, subject_id: str, stage: str, device: str):
         # usb towards the hand
         self.subject_id = subject_id
-        self.model = model
         self.stage = stage
         self.device = Device(device)
         self.fi = libemg.filtering.Filter(self.device.fs)
         self.fi.install_common_filters()
+
+        # Determine model based on latin square
+        subject_idx = (int(self.subject_id[-3:]) - 1) % len(LATIN_SQUARE)
+        self.model_order = LATIN_SQUARE[subject_idx]
+        models = ['within-sgt', 'combined-sgt', 'ciil', 'oracle']
+        completed_models = [path.stem for path in Path('data', self.subject_id).glob('*') if path.is_dir()]
+
+        for model_idx in self.model_order[:len(completed_models)]:
+            assert models[model_idx] in completed_models, f"Mismatched latin square order. Expected model {models[model_idx]} to be completed, but couldn't find data."
+
+        self.model = models[self.model_order[len(completed_models)]]
 
         self.get_device_parameters()
         self.get_feature_parameters()
