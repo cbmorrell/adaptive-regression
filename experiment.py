@@ -36,7 +36,7 @@ class Experiment:
         subject_idx = (int(self.subject_id[-3:]) - 1) % len(LATIN_SQUARE)
         self.model_order = LATIN_SQUARE[subject_idx]
         models = ['within-sgt', 'combined-sgt', 'ciil', 'oracle']
-        completed_models = [path.stem for path in Path('data', self.subject_id).glob('*') if path.is_dir()]
+        completed_models = [path.stem for path in Path('data', self.subject_id).glob('*') if path.is_dir() and path.stem in models]
 
         for model_idx in self.model_order[:len(completed_models)]:
             assert models[model_idx] in completed_models, f"Mismatched latin square order. Expected model {models[model_idx]} to be completed, but couldn't find data."
