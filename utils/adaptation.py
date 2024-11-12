@@ -160,6 +160,35 @@ def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
     return min(1, result)   # bound result to 1
 
 
+def assign_ciil_label(prediction, optimal_direction, outcomes):
+    positive_mask = outcomes == 'P'
+    num_positive_components = positive_mask.sum()
+    if num_positive_components == 2:
+        # Correct quadrant - point prediction to optimal direction (later normalized to correct magnitude)
+        adaptation_labels = np.copy(optimal_direction)
+    elif num_positive_components == 1:
+        # Off quadrant - one component is correct
+        adaptation_labels = np.zeros_like(prediction)
+        adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
+        adaptation_labels[~positive_mask] = 0.
+    else:
+        # Wrong quadrant - ignore this
+        return None
+
+    # Normalize to correct magnitude
+    # p = inf b/c (1, 1) should move the same speed as (1, 0)
+    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
+    # print(positive_mask, prediction, adaptation_labels)
+    return adaptation_labels
+
+
+def assign_oracle_label(prediction, optimal_direction):
+    # TODO: Decide if we normalize to the magnitude of the prediction here or do distance to prop control for both approaches
+    adaptation_labels = project_prediction(prediction, optimal_direction)
+    adaptation_labels *= np.linalg.norm(prediction, ord=2) / np.linalg.norm(adaptation_labels, ord=2)
+    return adaptation_labels
+
+
 def make_pseudo_labels(environment_data, smm, approach):
     timestamp = environment_data[0]
     optimal_direction = environment_data[1:]
@@ -189,30 +218,12 @@ def make_pseudo_labels(environment_data, smm, approach):
         
     else:
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
-        positive_mask = outcomes == 'P'
-        num_positive_components = positive_mask.sum()
-        if num_positive_components == 2:
-            # Correct quadrant - point prediction to optimal direction (later normalized to correct magnitude)
-            adaptation_labels = np.copy(optimal_direction)
-        elif num_positive_components == 1:
-            # Off quadrant - one component is correct
-            if approach == 'ciil':
-                adaptation_labels = np.zeros_like(prediction)
-                adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
-                adaptation_labels[~positive_mask] = 0.
-            elif approach == 'oracle':
-                adaptation_labels = project_prediction(prediction, optimal_direction)
-                # TODO: Decide if we normalize to the magnitude of the prediction here or do distance to prop control for both approaches
-            else:
-                raise ValueError(f"Unexpected value for approach. Got: {approach}.")
+        if approach == 'ciil':
+            adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)
+        elif approach == 'oracle':
+            adaptation_labels = assign_oracle_label(prediction, optimal_direction)
         else:
-            # Wrong quadrant - ignore this
-            return None
-
-        # Normalize to correct magnitude
-        # p = inf b/c (1, 1) should move the same speed as (1, 0)
-        adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
-        # print(positive_mask, prediction, adaptation_labels)
+            raise ValueError(f"Unexpected value for approach. Got: {approach}.")
 
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
