@@ -106,6 +106,7 @@ class Experiment:
 
     def get_adaptation_parameters(self):
         self.adaptation_model_file = Path(self.data_directory, 'ad_mdl.pkl').absolute().as_posix()
+        self.adaptation_fitts_file = Path(self.sgt_model_file).with_name('ad_fitts.pkl').as_posix()
         self.num_adaptation_epochs = 5
 
     def get_training_hyperparameters(self):
@@ -118,6 +119,7 @@ class Experiment:
         self.num_circles = 8
         self.num_trials = 2000  # set a large number so it will be triggered by time instead of trials
         self.dwell_time = 2.0
+        self.validation_fitts_file = Path(self.sgt_model_file).with_name('val_fitts.pkl').as_posix()
 
 
     def setup_online_model(self, online_data_handler, model_type):
