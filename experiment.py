@@ -100,7 +100,7 @@ class Experiment:
             self.animation_location = Path('animation', 'within').absolute().as_posix()
         self.image_location = 'images/'
         self.data_directory = Path('data', self.subject_id, self.model).absolute().as_posix()
-        self.num_reps = 5
+        self.num_reps = 1 if self.model_is_adaptive else 5
         self.num_train_epochs = 150
         self.sgt_model_file = Path(self.data_directory, 'sgt_mdl.pkl').absolute().as_posix()
 
