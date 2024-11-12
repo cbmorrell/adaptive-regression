@@ -138,16 +138,20 @@ def main():
     ciil_results = extract_fitts_metrics(ciil_data)
 
 
-    with open('/Users/cmorrell/Code/adaptive-regression/data/1-rep/combined-sgt/VAL_fitts.pkl', 'rb') as f:
-        sgt_data = pickle.load(f)
+    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-003/oracle/val_fitts.pkl', 'rb') as f:
+        oracle_prop_data = pickle.load(f)
+    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-003/oracle-no-prop/val_fitts.pkl', 'rb') as f:
+        oracle_no_prop_data = pickle.load(f)
 
-    sgt_results = extract_fitts_metrics(sgt_data)
+    oracle_prop_results = extract_fitts_metrics(oracle_prop_data)
+    oracle_no_prop_results = extract_fitts_metrics(oracle_no_prop_data)
 
 
-    fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(10, 6), layout='constrained')
-    axs[0].bar(['ciil', 'sgt'], [ciil_results['throughput'], sgt_results['throughput']])
-    axs[1].bar(['ciil', 'sgt'], [ciil_results['efficiency'], sgt_results['efficiency']])
-    axs[2].bar(['ciil', 'sgt'], [ciil_results['overshoots'], sgt_results['overshoots']])
+    fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(14, 6), layout='constrained')
+    x = ['ciil', 'oracle (distance)', 'oracle (prediction)']
+    axs[0].bar(x, [ciil_results['throughput'], oracle_prop_results['throughput'], oracle_no_prop_results['throughput']])
+    axs[1].bar(x, [ciil_results['efficiency'], oracle_prop_results['efficiency'], oracle_no_prop_results['efficiency']])
+    axs[2].bar(x, [ciil_results['overshoots'], oracle_prop_results['overshoots'], oracle_no_prop_results['overshoots']])
 
     axs[0].set_ylabel('Throughput')
     axs[1].set_ylabel('Path Efficiency')
