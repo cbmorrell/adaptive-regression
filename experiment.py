@@ -42,7 +42,7 @@ class Experiment:
             assert models[model_idx] in completed_models, f"Mismatched latin square order. Expected model {models[model_idx]} to be completed, but couldn't find data."
 
         self.model = models[self.model_order[len(completed_models)]]
-
+        self.use_combined_data = 'combined' in self.model
         self.get_device_parameters()
         self.get_feature_parameters()
         self.get_datacollection_parameters()
@@ -94,7 +94,7 @@ class Experiment:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
-        if 'combined' in self.model:
+        if self.use_combined_data:
             self.animation_location = Path('animation', 'combined').absolute().as_posix()
         else:
             self.animation_location = Path('animation', 'within').absolute().as_posix()
@@ -227,7 +227,9 @@ class Experiment:
 
     def start_sgt(self, online_data_handler):
         self.make_collection_video('within')
-        self.make_collection_video('combined')
+        if self.use_combined_data:
+            self.make_collection_video('combined')
+
         collect_data(online_data_handler, self.animation_location, self.data_directory, self.num_reps)
 
     def make_collection_video(self, video):
@@ -241,8 +243,17 @@ class Experiment:
         if filepath.exists():
             return
 
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        matching_video_paths = [path for path in filepath.parent.parent.rglob('*') if path.name == filepath.name]
+        if len(matching_video_paths) > 0:
+            # Found matching file
+            assert len(matching_video_paths) == 1, f"Found multiple matching video names {filepath}."
+            matching_video_path = matching_video_paths[0]
+            shutil.copy(matching_video_path, filepath)
+            shutil.copy(matching_video_path.with_suffix('.txt'), filepath.with_suffix('.txt'))
+            return
+
         print(f"Creating {video} collection video...")
-        filepath.mkdir(parents=True, exist_ok=True)
         animator = libemg.animator.ScatterPlotAnimator(output_filepath=filepath.as_posix(),
                                                         axis_images={"N":pictures["Supination"],
                                                                     "E":pictures["Hand_Open"],
