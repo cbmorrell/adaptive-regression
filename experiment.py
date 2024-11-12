@@ -94,7 +94,10 @@ class Experiment:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
-        self.animation_location = 'animation'
+        if 'combined' in self.model:
+            self.animation_location = Path('animation', 'combined').absolute().as_posix()
+        else:
+            self.animation_location = Path('animation', 'within').absolute().as_posix()
         self.image_location = 'images/'
         self.data_directory = Path('data', self.subject_id, self.model).absolute().as_posix()
         self.num_reps = 5
