@@ -183,9 +183,8 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
 
 
 def assign_oracle_label(prediction, optimal_direction):
-    # TODO: Decide if we normalize to the magnitude of the prediction here or do distance to prop control for both approaches
     adaptation_labels = project_prediction(prediction, optimal_direction)
-    adaptation_labels *= np.linalg.norm(prediction, ord=2) / np.linalg.norm(adaptation_labels, ord=2)
+    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
     return adaptation_labels
 
 
