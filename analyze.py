@@ -124,7 +124,7 @@ def extract_fitts_metrics(run_log):
 
 
 def main():
-    with open('/Users/cmorrell/Code/adaptive-regression/data/1-rep/combined-ciil/VAL_fitts.pkl', 'rb') as f:
+    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-003/ciil/val_fitts.pkl', 'rb') as f:
         ciil_data = pickle.load(f)
 
     predictions = np.linalg.norm(ciil_data['current_direction'], axis=1) / 25
