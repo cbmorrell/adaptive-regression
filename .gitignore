@@ -169,3 +169,4 @@ cython_debug/
 sifibridge*
 images/
 animation/
+results/
