@@ -57,7 +57,7 @@ def main():
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
-        isofitts = AdaptationIsoFitts(experiment.shared_memory_items, controller, num_circles=8, num_trials=200, dwell_time=2.0,
+        isofitts = AdaptationIsoFitts(experiment.shared_memory_items, controller, num_circles=experiment.num_circles, num_trials=experiment.num_trials, dwell_time=experiment.dwell_time,
                                                            save_file=Path(experiment.sgt_model_file).with_name('AD_fitts.pkl').as_posix())
         isofitts.run()
 
@@ -67,7 +67,7 @@ def main():
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()
-        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=8, num_trials=20, dwell_time=1.0,
+        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=experiment.num_circles, num_trials=experiment.num_trials, dwell_time=experiment.dwell_time,
                                                            save_file=Path(experiment.sgt_model_file).with_name('VAL_fitts.pkl').as_posix())
         isofitts.run()
 

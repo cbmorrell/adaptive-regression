@@ -115,6 +115,10 @@ class Experiment:
     def get_game_parameters(self):
         # self.game_time = 300
         self.game_time = 240
+        self.num_circles = 8
+        self.num_trials = 2000  # set a large number so it will be triggered by time instead of trials
+        self.dwell_time = 2.0
+
 
     def setup_online_model(self, online_data_handler, model_type):
         if self.stage == 'sgt':
