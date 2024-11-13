@@ -17,15 +17,6 @@ from utils.models import MLP
 from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
-# Balanced latin square for 4 conditions
-MODELS = np.array(['ciil', 'combined-sgt', 'oracle', 'within-sgt'])
-LATIN_SQUARE = np.array([
-    [0, 1, 2, 3],
-    [1, 2, 0, 3],
-    [2, 3, 1, 0],
-    [3, 0, 2, 1]
-])
-
 
 @dataclass(frozen=True)
 class Config:
@@ -79,10 +70,19 @@ class Config:
 
     @property
     def model(self):
+        # Balanced latin square for 4 conditions
+        conditions = np.array(['ciil', 'combined-sgt', 'oracle', 'within-sgt'])
+        latin_square = np.array([
+            [0, 1, 2, 3],
+            [1, 2, 0, 3],
+            [2, 3, 1, 0],
+            [3, 0, 2, 1]
+        ])
+
         # Determine model based on latin square
-        subject_idx = (int(self.subject_id[-3:]) - 1) % len(LATIN_SQUARE)
-        model_mask = LATIN_SQUARE[subject_idx]
-        ordered_models = MODELS[model_mask]
+        subject_idx = (int(self.subject_id[-3:]) - 1) % len(latin_square)
+        condition_order = latin_square[subject_idx]
+        ordered_models = conditions[condition_order]
         completed_models = [path.stem for path in self.subject_directory.glob('*') if path.is_dir() and path.stem in ordered_models and any(path.iterdir())]
         expected_models = ordered_models[:len(completed_models)]
         assert np.all(np.sort(completed_models) == np.sort(expected_models)), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
