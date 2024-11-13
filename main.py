@@ -1,12 +1,11 @@
 import argparse
-from pathlib import Path
 
 import libemg
 import numpy as np
 from utils.adaptation import AdaptationIsoFitts
-from multiprocessing import Process
+from utils.data_collection import Device
 
-from experiment import Experiment
+from experiment import Experiment, Config
 
 def main():
     # CLI arguments
@@ -25,7 +24,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    experiment = Experiment(subject_id=args.subject_id, stage=args.objective, device=args.device)
+    experiment = Experiment(Config(subject_id=args.subject_id, stage=args.objective, device=Device(args.device)))
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for sm_item in experiment.shared_memory_items:
         smm.create_variable(*sm_item)
@@ -40,14 +39,14 @@ def main():
         if method == 'heatmap':
             # Assume EMaGer
             remap_function = lambda x: np.reshape(x, (x.shape[0], 4, 16))
-            online_data_handler.visualize_heatmap(num_samples=experiment.device.fs, remap_function=remap_function, feature_list=['MAV', 'RMS'])
+            online_data_handler.visualize_heatmap(num_samples=experiment.config.device.fs, remap_function=remap_function, feature_list=['MAV', 'RMS'])
         elif method == 'time':
-            online_data_handler.visualize(num_samples=experiment.device.fs, block=True)
+            online_data_handler.visualize(num_samples=experiment.config.device.fs, block=True)
         else:
             # Passed in list of channels
             channels = method.replace(' ', '').split(',')
             channels = list(map(int, channels))
-            online_data_handler.visualize_channels(channels, num_samples=experiment.device.fs)
+            online_data_handler.visualize_channels(channels, num_samples=experiment.config.device.fs)
 
         experiment.start_sgt(online_data_handler)
 
@@ -57,8 +56,8 @@ def main():
 
         # Create Fitts environment with or without CIIL
         controller = libemg.environments.controllers.RegressorController()
-        isofitts = AdaptationIsoFitts(experiment.shared_memory_items, controller, num_circles=experiment.num_circles, num_trials=experiment.num_trials, dwell_time=experiment.dwell_time,
-                                                           save_file=experiment.adaptation_fitts_file)
+        isofitts = AdaptationIsoFitts(experiment.shared_memory_items, controller, num_circles=experiment.config.NUM_CIRCLES, num_trials=experiment.config.NUM_TRIALS,
+                                       dwell_time=experiment.config.DWELL_TIME, save_file=experiment.config.adaptation_fitts_file)
         isofitts.run()
 
     elif args.objective == 'validation':
@@ -67,8 +66,9 @@ def main():
 
         # Create Fitts environment
         controller = libemg.environments.controllers.RegressorController()
-        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=experiment.num_circles, num_trials=experiment.num_trials, dwell_time=experiment.dwell_time,
-                                                           save_file=experiment.validation_fitts_file, game_time=experiment.game_time)
+        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=experiment.config.NUM_CIRCLES, num_trials=experiment.config.NUM_TRIALS,
+                                                            dwell_time=experiment.config.DWELL_TIME, save_file=experiment.config.validation_fitts_file,
+                                                            game_time=experiment.config.GAME_TIME)
         isofitts.run()
 
     print('------------------Main script complete------------------')
