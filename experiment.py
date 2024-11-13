@@ -14,7 +14,7 @@ import torch
 from PIL import Image
 
 from utils.models import MLP
-from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels
+from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationIsoFitts
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
@@ -26,7 +26,8 @@ class Config:
     NUM_ADAPTATION_EPOCHS: ClassVar[int] = 5
     BATCH_SIZE: ClassVar[int] = 64
     LEARNING_RATE: ClassVar[float] = 2e-3
-    GAME_TIME: ClassVar[int] = 240  # TODO: Have adaptation game time and validation game time
+    ADAPTATION_TIME: ClassVar[int] = 240    # (seconds)
+    VALIDATION_TIME: ClassVar[int] = 300 # (seconds)
     NUM_CIRCLES: ClassVar[int] = 8
     NUM_TRIALS: ClassVar[int] = 2000  # set a large number so it will be triggered by time instead of trials
     DWELL_TIME: ClassVar[float] = 2.0
@@ -156,21 +157,17 @@ class Experiment:
         returned_features = fe.extract_features(self.config.features, fake_window, self.config.feature_dictionary)
         return sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
-
-    def setup_online_model(self, online_data_handler, model_type):
-        if self.config.stage == 'sgt':
-            raise ValueError(f"Tried to setup online model when stage is set to 'sgt'.")
-
+    def setup_online_model(self, online_data_handler):
         self.prepare_model_from_sgt()
 
-        if model_type == 'adaptation':
+        if self.config.stage == 'adaptation':
             model_file = self.config.sgt_model_file
             previous_stage = 'sgt'
-        elif model_type == 'validation':
+        elif self.config.stage == 'validation':
             model_file = self.config.adaptation_model_file
             previous_stage = 'adaptation'
         else:
-            raise ValueError(f"Unexpected value for model_type. Got: {model_type}.")
+            raise ValueError(f"Stage {self.config.stage} should not use an online model.")
 
         if not Path(model_file).exists():
             raise FileNotFoundError(f"{model_file} not found. Please run {previous_stage} first.")
@@ -250,7 +247,6 @@ class Experiment:
         # save EMGClassifier to file
         with open(self.config.sgt_model_file, 'wb') as handle:
             pickle.dump(offline_regressor, handle)
-
 
     def setup_live_processing(self):
         p, smi = self.config.device.stream()
@@ -339,7 +335,7 @@ class Experiment:
         
         time.sleep(3)
         
-        while (time.perf_counter() - start_time) < self.config.GAME_TIME:
+        while (time.perf_counter() - start_time) < self.config.ADAPTATION_TIME:
             try:
                 data = smm.get_variable('memory_update_flag')[0, 0]
                 if data == WROTE:
@@ -446,3 +442,18 @@ class Experiment:
             except:
                 logging.error("MEMORYMANAGER: "+traceback.format_exc())
         print('memory_manager finished!')
+
+    def run_isofitts(self, online_data_handler):
+        online_regressor = self.setup_online_model(online_data_handler)
+        controller = libemg.environments.controllers.RegressorController()
+        if self.config.stage == 'adaptation':
+            self.start_adapting(online_regressor.predictor)
+            isofitts = AdaptationIsoFitts(self.shared_memory_items, controller, num_circles=self.config.NUM_CIRCLES, num_trials=self.config.NUM_TRIALS,
+                                        dwell_time=self.config.DWELL_TIME, save_file=self.config.adaptation_fitts_file)
+        elif self.config.stage == 'validation':
+            isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=self.config.NUM_CIRCLES, num_trials=self.config.NUM_TRIALS,
+                                                                dwell_time=self.config.DWELL_TIME, save_file=self.config.validation_fitts_file,
+                                                                game_time=self.config.VALIDATION_TIME)
+        else:
+            raise ValueError(f"Stage {self.config.stage} should not run isofitts task.")
+        isofitts.run()

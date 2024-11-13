@@ -2,7 +2,6 @@ import argparse
 
 import libemg
 import numpy as np
-from utils.adaptation import AdaptationIsoFitts
 from utils.data_collection import Device
 
 from experiment import Experiment, Config
@@ -50,26 +49,8 @@ def main():
 
         experiment.start_sgt(online_data_handler)
 
-    elif args.stage == 'adaptation':
-        mdl = experiment.setup_online_model(online_data_handler, 'adaptation')
-        experiment.start_adapting(mdl.predictor)
-
-        # Create Fitts environment with or without CIIL
-        controller = libemg.environments.controllers.RegressorController()
-        isofitts = AdaptationIsoFitts(experiment.shared_memory_items, controller, num_circles=experiment.config.NUM_CIRCLES, num_trials=experiment.config.NUM_TRIALS,
-                                       dwell_time=experiment.config.DWELL_TIME, save_file=experiment.config.adaptation_fitts_file)
-        isofitts.run()
-
-    elif args.stage == 'validation':
-        # assume we have a model from the adaptation phase (whether it was not adapted or adapted)
-        mdl = experiment.setup_online_model(online_data_handler, 'validation')
-
-        # Create Fitts environment
-        controller = libemg.environments.controllers.RegressorController()
-        isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=experiment.config.NUM_CIRCLES, num_trials=experiment.config.NUM_TRIALS,
-                                                            dwell_time=experiment.config.DWELL_TIME, save_file=experiment.config.validation_fitts_file,
-                                                            game_time=experiment.config.GAME_TIME)
-        isofitts.run()
+    else:
+        experiment.run_isofitts(online_data_handler)
 
     print('------------------Main script complete------------------')
 
