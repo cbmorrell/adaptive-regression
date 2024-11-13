@@ -13,7 +13,7 @@ def main():
     parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
     parser.add_argument('subject_id', type=str, help='Subject ID.')
     parser.add_argument('--analyze', action='store_true', help='Flag to call analyze_hardware() method.')
-    subparsers = parser.add_subparsers(description='Streaming objectives.', dest='objective', required=True)
+    subparsers = parser.add_subparsers(description='Experiment stage.', dest='stage', required=True)
 
     sgt_parser = subparsers.add_parser('sgt', description='Collect data.')
     sgt_parser.add_argument('--visualization_method', default='time', type=str, help='Visualization method before collecting data. Options are heatmap, time, or comma-separated channels (e.g., 4,8,10).')
@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    experiment = Experiment(Config(subject_id=args.subject_id, stage=args.objective, device=Device(args.device)))
+    experiment = Experiment(Config(subject_id=args.subject_id, stage=args.stage, device=Device(args.device)))
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for sm_item in experiment.shared_memory_items:
         smm.create_variable(*sm_item)
@@ -33,7 +33,7 @@ def main():
     if args.analyze:
         online_data_handler.analyze_hardware()
     
-    if args.objective == 'sgt':
+    if args.stage == 'sgt':
         # Visualize
         method = args.visualization_method
         if method == 'heatmap':
@@ -50,7 +50,7 @@ def main():
 
         experiment.start_sgt(online_data_handler)
 
-    elif args.objective == 'adaptation':
+    elif args.stage == 'adaptation':
         mdl = experiment.setup_online_model(online_data_handler, 'adaptation')
         experiment.start_adapting(mdl.predictor)
 
@@ -60,7 +60,7 @@ def main():
                                        dwell_time=experiment.config.DWELL_TIME, save_file=experiment.config.adaptation_fitts_file)
         isofitts.run()
 
-    elif args.objective == 'validation':
+    elif args.stage == 'validation':
         # assume we have a model from the adaptation phase (whether it was not adapted or adapted)
         mdl = experiment.setup_online_model(online_data_handler, 'validation')
 
