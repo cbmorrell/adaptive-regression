@@ -16,6 +16,7 @@ from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labe
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 # Balanced latin square for 4 conditions
+MODELS = np.array(['ciil', 'combined-sgt', 'oracle', 'within-sgt'])
 LATIN_SQUARE = np.array([
     [0, 1, 2, 3],
     [1, 2, 0, 3],
@@ -32,17 +33,6 @@ class Experiment:
         self.fi = libemg.filtering.Filter(self.device.fs)
         self.fi.install_common_filters()
 
-        # Determine model based on latin square
-        subject_idx = (int(self.subject_id[-3:]) - 1) % len(LATIN_SQUARE)
-        self.model_order = LATIN_SQUARE[subject_idx]
-        models = ['within-sgt', 'combined-sgt', 'ciil', 'oracle']
-        completed_models = [path.stem for path in Path('data', self.subject_id).glob('*') if path.is_dir() and path.stem in models and any(path.iterdir())]
-
-        for model_idx in self.model_order[:len(completed_models)]:
-            assert models[model_idx] in completed_models, f"Mismatched latin square order. Expected model {models[model_idx]} to be completed, but couldn't find data."
-
-        self.model = models[self.model_order[len(completed_models)]]
-        self.use_combined_data = 'combined' in self.model
         self.get_device_parameters()
         self.get_feature_parameters()
         self.get_datacollection_parameters()
@@ -94,12 +84,28 @@ class Experiment:
         self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
 
     def get_datacollection_parameters(self):
+        # Determine model based on latin square
+        subject_directory = Path('data', self.subject_id)
+        subject_idx = (int(self.subject_id[-3:]) - 1) % len(LATIN_SQUARE)
+        model_mask = LATIN_SQUARE[subject_idx]
+        ordered_models = MODELS[model_mask]
+        completed_models = [path.stem for path in subject_directory.glob('*') if path.is_dir() and path.stem in ordered_models and any(path.iterdir())]
+        expected_models = ordered_models[:len(completed_models)]
+        assert np.all(np.sort(completed_models) == np.sort(expected_models)), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
+
+        if self.stage == 'sgt':
+            self.model = ordered_models[len(completed_models)]
+        else:
+            assert len(completed_models) >= 1, f"Got 0 completed models. Please perform SGT first."
+            self.model = ordered_models[len(completed_models) - 1]
+
+        self.use_combined_data = 'combined' in self.model
         if self.use_combined_data:
             self.animation_location = Path('animation', 'combined').absolute().as_posix()
         else:
             self.animation_location = Path('animation', 'within').absolute().as_posix()
         self.image_location = 'images/'
-        self.data_directory = Path('data', self.subject_id, self.model).absolute().as_posix()
+        self.data_directory = subject_directory.joinpath(self.model).absolute().as_posix()
         self.num_reps = 1 if self.model_is_adaptive else 5
         self.num_train_epochs = 150
         self.sgt_model_file = Path(self.data_directory, 'sgt_mdl.pkl').absolute().as_posix()
