@@ -30,6 +30,7 @@ def calculate_efficiency(run_log):
 
 def calculate_throughput(run_log):
     # See https://www.yorku.ca/mack/hhci2018.html for explanation of effective width and TP calculation
+    raise NotImplementedError('Need to make sure this factors in the width of the target.')
     trials = np.unique(run_log['trial_number'])
     effective_amplitudes = []
     effective_distances = []
