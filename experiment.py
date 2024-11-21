@@ -439,7 +439,7 @@ class Experiment:
         controller = libemg.environments.controllers.RegressorController()
         if self.config.stage == 'adaptation':
             self.start_adapting(online_regressor.predictor)
-            isofitts = AdaptationIsoFitts(self.shared_memory_items, controller, num_circles=self.config.NUM_CIRCLES, num_trials=self.config.NUM_TRIALS,
+            isofitts = AdaptationIsoFitts(self.shared_memory_items, controller, num_trials=self.config.NUM_TRIALS,
                                         dwell_time=self.config.DWELL_TIME, save_file=self.config.adaptation_fitts_file)
         elif self.config.stage == 'validation':
             isofitts = libemg.environments.fitts.PolarFitts(controller, num_trials=self.config.NUM_TRIALS,
