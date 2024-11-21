@@ -25,8 +25,9 @@ class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
         # Write to log_dictionary
         super()._log(label, timestamp)
 
-        target_position = np.array(self.log_dictionary['goal_circle'][-1])
-        cursor_position = np.array(self.log_dictionary['cursor_position'][-1])
+        target = self.log_dictionary['goal_target'][-1]
+        target_position = np.array(target[:2])
+        cursor_position = np.array(self.log_dictionary['cursor_position'][-1][:2])
         optimal_direction = target_position - cursor_position
         optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
 
@@ -40,7 +41,7 @@ class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
         # Probably need to change theta so it's between -pi/2 and pi/2 so that signs are still correct...
 
 
-        output = np.array([timestamp, optimal_polar_direction[0], optimal_polar_direction[1]], dtype=np.double)
+        output = np.array([timestamp, optimal_polar_direction[0], optimal_polar_direction[1], target[2]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
         if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
             self.done = True
@@ -224,8 +225,8 @@ def assign_oracle_label(prediction, optimal_direction):
 
 def make_pseudo_labels(environment_data, smm, approach):
     timestamp = environment_data[0]
-    optimal_direction = environment_data[1:]    # in Polar coordinates
-    target_radius = 40  # defined in Fitts
+    optimal_direction = environment_data[1:-1]    # in Polar coordinates
+    target_radius = environment_data[-1]
 
     # find the features: data - timestamps, <- features ->
     feature_data = smm.get_variable("model_input")
@@ -239,7 +240,7 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    if optimal_direction[0] < target_radius:
+    if np.abs(optimal_direction[0]) < target_radius:
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
@@ -266,14 +267,3 @@ def make_pseudo_labels(environment_data, smm, approach):
     adaptation_direction = np.expand_dims(np.array(optimal_direction), axis=0)
     adaptation_outcome   = np.expand_dims(np.array(outcomes), axis=0)
     return adaptation_data, adaptation_labels, adaptation_direction, adaptation_outcome, timestamp
-
-# prediction = np.array([0.4, 0.2])
-# # optimal_direction = np.array([100, 200])
-# # radius = np.linalg.norm(optimal_direction) * np.sign(optimal_direction)
-# # theta = math.atan2(optimal_direction[1], optimal_direction[0])
-# # optimal_polar_direction = [radius, theta]
-# optimal_polar_direction = np.array([10, math.pi / 4])
-
-# # Probably need to change theta so it's between -pi/2 and pi/2 so that signs are still correct...
-# outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_polar_direction)])
-# assign_ciil_label(np.array([0.4, 0.2]), np.array([10, math.pi / 4]), outcomes)
