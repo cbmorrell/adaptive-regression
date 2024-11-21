@@ -129,7 +129,6 @@ class Config:
 
     @property
     def validation_fitts_file(self):
-        # self.game_time = 300
         return Path(self.sgt_model_file).with_name('val_fitts.pkl').as_posix()
 
 
@@ -235,12 +234,12 @@ class Experiment:
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
         mdl = MLP(self.input_shape, self.config.BATCH_SIZE, self.config.LEARNING_RATE, self.config.LOSS_FUNCTION, Path(self.config.sgt_model_file).with_name('loss.csv').as_posix())
-        print('Fitting model...')
+        print('Fitting SGT model...')
         mdl.fit(num_epochs=self.config.NUM_TRAIN_EPOCHS, shuffle_every_epoch=True, memory=sgt_memory)
         # install mdl and thresholds to EMGClassifier
         offline_regressor = libemg.emg_predictor.EMGRegressor(mdl)
+        offline_regressor.install_feature_parameters(self.config.feature_dictionary)
         
-        # offline_classifier.__setattr__("feature_params", config.feature_dictionary)
         # save EMGClassifier to file
         with open(self.config.sgt_model_file, 'wb') as handle:
             pickle.dump(offline_regressor, handle)
@@ -443,7 +442,7 @@ class Experiment:
             isofitts = AdaptationIsoFitts(self.shared_memory_items, controller, num_circles=self.config.NUM_CIRCLES, num_trials=self.config.NUM_TRIALS,
                                         dwell_time=self.config.DWELL_TIME, save_file=self.config.adaptation_fitts_file)
         elif self.config.stage == 'validation':
-            isofitts   = libemg.environments.isofitts.IsoFitts(controller, num_circles=self.config.NUM_CIRCLES, num_trials=self.config.NUM_TRIALS,
+            isofitts = libemg.environments.fitts.PolarFitts(controller, num_trials=self.config.NUM_TRIALS,
                                                                 dwell_time=self.config.DWELL_TIME, save_file=self.config.validation_fitts_file,
                                                                 game_time=self.config.VALIDATION_TIME)
         else:
