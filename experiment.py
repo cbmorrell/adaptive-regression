@@ -140,7 +140,7 @@ class Experiment:
 
         self.shared_memory_items = [["model_output", (100,3), np.double], #timestamp, <DOFs>
                                     ["model_input", (100,1+self.input_shape), np.double], # timestamp, <- features ->
-                                    ["environment_output", (100, 1+2), np.double],  # timestamp, <2 DoF optimal direction>, <2 DoF CIIL direction>
+                                    ["environment_output", (100, 4), np.double],  # timestamp, <2 DoF optimal direction>, <target radius>
                                     ["adapt_flag", (1,1),  np.int32],
                                     ["active_flag", (1,1), np.int8],
                                     ["memory_update_flag", (1,1), np.int8]]
