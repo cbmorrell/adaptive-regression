@@ -486,9 +486,6 @@ class MLP(nn.Module):
         return self.net(x)
     
     def predict(self, data):
-        return self.predict_proba(data)
-
-    def predict_proba(self,data):
         if type(data) == np.ndarray:
             data = torch.tensor(data, dtype=torch.float32)
         data = data.to("cpu").clone()
