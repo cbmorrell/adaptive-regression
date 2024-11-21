@@ -171,16 +171,6 @@ class Experiment:
         with open(model_file, 'rb') as handle:
             loaded_mdl = pickle.load(handle)
 
-        if self.config.model_is_adaptive:
-            smm = True
-            smi = [
-                ['model_input', (100, 1 + (8 * self.config.device.num_channels)), np.double], # timestamp <- features ->
-                ['model_output', (100, 3), np.double]  # timestamp, prediction 1, prediction 2... (assumes 2 DOFs)
-            ]
-        else:
-            smm = False
-            smi = None
-
         model = libemg.emg_predictor.OnlineEMGRegressor(
             offline_regressor=loaded_mdl,
             window_size=self.config.window_length,
@@ -189,8 +179,8 @@ class Experiment:
             features=self.config.features,
             file_path=Path(self.config.sgt_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
             file=True,
-            smm=smm,
-            smm_items=smi,
+            smm=self.config.model_is_adaptive,
+            smm_items=self.shared_memory_items,
             std_out=False
         )
         model.predictor.model.net.eval()
