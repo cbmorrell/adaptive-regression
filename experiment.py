@@ -159,22 +159,19 @@ class Experiment:
 
     def setup_online_model(self, online_data_handler):
         self.prepare_model_from_sgt()
-
         if self.config.stage == 'adaptation':
             model_file = self.config.sgt_model_file
-            previous_stage = 'sgt'
         elif self.config.stage == 'validation':
-            model_file = self.config.adaptation_model_file
-            previous_stage = 'adaptation'
+            model_file = self.config.adaptation_model_file if self.config.model_is_adaptive else self.config.sgt_model_file
         else:
             raise ValueError(f"Stage {self.config.stage} should not use an online model.")
 
         if not Path(model_file).exists():
-            raise FileNotFoundError(f"{model_file} not found. Please run {previous_stage} first.")
+            raise FileNotFoundError(f"{model_file} not found.")
 
         with open(model_file, 'rb') as handle:
             loaded_mdl = pickle.load(handle)
-    
+
         if self.config.model_is_adaptive:
             smm = True
             smi = [
@@ -298,12 +295,7 @@ class Experiment:
         animator.save_plot_video(coordinates, title='Regression Training', save_coordinates=True, verbose=True)
 
     def start_adapting(self, emg_predictor):
-        if not self.config.model_is_adaptive and not Path(self.config.adaptation_model_file).exists():
-            # Model should not be adapted, so we save the SGT model as the adapted model
-            shutil.copy(self.config.sgt_model_file, self.config.adaptation_model_file)
-            print(f"Model {self.config.model} should not be adapted - copied SGT model ({self.config.sgt_model_file}) to adaptive model ({self.config.adaptation_model_file}).")
-            return
-
+        assert self.config.model_is_adaptive, f"Attempted to perform adaptation for non-adaptive model. Terminating script."
         memoryProcess = Process(target=self._memory_manager, daemon=True)
         memoryProcess.start()
 
