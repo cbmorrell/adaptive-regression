@@ -17,7 +17,7 @@ SCREEN_SIZE = 800
 class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
     def __init__(self, shared_memory_items, controller: libemg.environments.controllers.Controller, num_trials: int = 15,
                   dwell_time: float = 3, save_file: str | None = None, fps: int = 60):
-        super().__init__(controller, num_trials=num_trials, dwell_time=dwell_time, save_file=save_file, fps=fps)
+        super().__init__(controller, num_trials=num_trials, dwell_time=dwell_time, save_file=save_file, fps=fps, width=SCREEN_SIZE, height=SCREEN_SIZE)
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
         for sm_item in shared_memory_items:
             self.smm.create_variable(*sm_item)
