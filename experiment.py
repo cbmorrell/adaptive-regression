@@ -14,7 +14,7 @@ import torch
 from PIL import Image
 
 from utils.models import MLP
-from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationIsoFitts
+from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationIsoFitts, SCREEN_SIZE
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
@@ -28,7 +28,6 @@ class Config:
     LEARNING_RATE: ClassVar[float] = 2e-3
     ADAPTATION_TIME: ClassVar[int] = 240    # (seconds)
     VALIDATION_TIME: ClassVar[int] = 300 # (seconds)
-    NUM_CIRCLES: ClassVar[int] = 8
     NUM_TRIALS: ClassVar[int] = 2000  # set a large number so it will be triggered by time instead of trials
     DWELL_TIME: ClassVar[float] = 2.0
     WINDOW_LENGTH_MS: ClassVar[int] = 150 #ms
@@ -434,7 +433,7 @@ class Experiment:
         elif self.config.stage == 'validation':
             isofitts = libemg.environments.fitts.PolarFitts(controller, num_trials=self.config.NUM_TRIALS,
                                                                 dwell_time=self.config.DWELL_TIME, save_file=self.config.validation_fitts_file,
-                                                                game_time=self.config.VALIDATION_TIME)
+                                                                game_time=self.config.VALIDATION_TIME, width=SCREEN_SIZE, height=SCREEN_SIZE)
         else:
             raise ValueError(f"Stage {self.config.stage} should not run isofitts task.")
         isofitts.run()
