@@ -11,6 +11,7 @@ import libemg
 WAITING = 0
 WROTE = 1
 DONE_TASK = -10
+SCREEN_SIZE = 800
 
 
 class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
@@ -28,20 +29,26 @@ class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
         target = self.log_dictionary['goal_target'][-1]
         target_position = np.array(target[:2])
         cursor_position = np.array(self.log_dictionary['cursor_position'][-1][:2])
-        optimal_direction = target_position - cursor_position
-        optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
+        # optimal_direction = target_position - cursor_position
+        # optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
 
-        # Convert to polar coordinates for PolarFitts
-        # move this to Fitts b/c I need to determine if the target is further or closer to center of screen than cursor to determine if radius should be increased or decreased
+        # Convert to polar coordinates for PolarFitts (based on center of screen)
         center_screen = np.array([self.width // 2, self.height // 2])
-        radius_multiplier = -1 if np.linalg.norm(target_position - center_screen) < np.linalg.norm(cursor_position - center_screen) else 1
+        polar_target_position = cartesian_to_polar(cursor_position - center_screen)
+        polar_cursor_position = cartesian_to_polar(target_position - center_screen)
+        optimal_direction = polar_target_position - polar_cursor_position
+        # radius_multiplier = -1 if np.linalg.norm(target_position - center_screen) < np.linalg.norm(cursor_position - center_screen) else 1
 
-        optimal_polar_direction = cartesian_to_polar(optimal_direction)
-        optimal_polar_direction[0] *= radius_multiplier
-        # Probably need to change theta so it's between -pi/2 and pi/2 so that signs are still correct...
+        # optimal_polar_direction = cartesian_to_polar(optimal_direction)
+        # optimal_polar_direction[0] *= radius_multiplier
+        # optimal_polar_direction[1] -= self.theta * radius_multiplier    # subtract out the same theta
+        # TODO: Change optimal direction so it's calculated based on the center of the screen. We shouldn't be just converting the original direction to polar.
+        # If the target is straight up, then it would say you need to go [y, pi/2], but the actual difference should be in terms of the current theta and radius
+        # This is close, but you can end up with cases where the polar coorinate is outside the bounds of (pi/2, -pi/2) (like if the target is to the bottom left of the cursor).
+        # I guess the proper way is probably to say: get polar coordinates of target and cursor then subtract?
 
 
-        output = np.array([timestamp, optimal_polar_direction[0], optimal_polar_direction[1], target[2]], dtype=np.double)
+        output = np.array([timestamp, optimal_direction[0], optimal_direction[1], target[2]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
         if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
             self.done = True
@@ -190,8 +197,13 @@ def cartesian_to_polar(p):
     return np.array([r, theta])
 
 
+def theta_to_label(theta):
+    # Based on how predictions are mapped to theta in PolarFitts
+    return theta * 0.5 * SCREEN_SIZE / math.pi
+
+
 def assign_ciil_label(prediction, optimal_direction, outcomes):
-    # optimal_direction[1] = (325 * optimal_direction[1]) / math.pi
+    # TODO: Should we make it so if you're in line with a target in any dimension, then you're always setting the other dimension to 0 in the pseudo labels?
     positive_mask = outcomes == 'P'
     num_positive_components = positive_mask.sum()
     if num_positive_components == 2:
@@ -207,8 +219,7 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
         return None
 
     # Convert polar to labels (based on how we handle predictions in PolarFitts)
-    # adaptation_labels[1] = np.interp(adaptation_labels[1], (-math.pi / 2, math.pi / 2), ())
-    adaptation_labels[1] = (325 * adaptation_labels[1]) / (math.pi)    # 325=screen radius, 25=VEL
+    adaptation_labels[1] = theta_to_label(adaptation_labels[1])
 
     # Normalize to correct magnitude
     # p = inf b/c (1, 1) should move the same speed as (1, 0)
@@ -217,8 +228,12 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
     return adaptation_labels
 
 
-def assign_oracle_label(prediction, optimal_direction):
-    adaptation_labels = project_prediction(prediction, optimal_direction)
+def assign_oracle_label(optimal_direction):
+    # NOTE: Whether or not we project the prediction or just use the optimal direction gives different results.
+    # I think we can argue that other approaches don't factor in the prediction when making the pseudo labels and just assume that the user is in the optimal direction,
+    # so we don't project here.
+    adaptation_labels = np.copy(optimal_direction)
+    adaptation_labels[1] = theta_to_label(adaptation_labels[1])
     adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
     return adaptation_labels
 
@@ -250,14 +265,11 @@ def make_pseudo_labels(environment_data, smm, approach):
         # We could probably do something else naive and say that the user is comfortable giving half the radius as a buffer, but that's kind of random.
         
     else:
-        # I think this works if we're in -pi/2 to pi/2
-        # optimal_direction is usually in terms of pixels on screen
-        # so I think if I map from screen size to (-pi/2, pi/2) it should work
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
         if approach == 'ciil':
             adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)
         elif approach == 'oracle':
-            adaptation_labels = assign_oracle_label(prediction, optimal_direction)
+            adaptation_labels = assign_oracle_label(optimal_direction)
         else:
             raise ValueError(f"Unexpected value for approach. Got: {approach}.")
 
