@@ -11,13 +11,17 @@ import libemg
 WAITING = 0
 WROTE = 1
 DONE_TASK = -10
+ADAPTATION_TIME = 240   # seconds
+VALIDATION_TIME = 300   # seconds
 SCREEN_SIZE = 800
 
 
-class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
-    def __init__(self, shared_memory_items, controller: libemg.environments.controllers.Controller, num_trials: int = 15,
-                  dwell_time: float = 3, save_file: str | None = None, fps: int = 60):
-        super().__init__(controller, num_trials=num_trials, dwell_time=dwell_time, save_file=save_file, fps=fps, width=SCREEN_SIZE, height=SCREEN_SIZE)
+class AdaptationFitts(libemg.environments.fitts.PolarFitts):
+    def __init__(self, shared_memory_items, save_file: str, adapt: bool):
+        controller = libemg.environments.controllers.RegressorController()
+        game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
+        super().__init__(controller, num_trials=2000, dwell_time=2.0, save_file=save_file, fps=60, width=SCREEN_SIZE, height=SCREEN_SIZE, game_time=game_time)
+        self.adapt = adapt
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
         for sm_item in shared_memory_items:
             self.smm.create_variable(*sm_item)
@@ -25,6 +29,9 @@ class AdaptationIsoFitts(libemg.environments.fitts.PolarFitts):
     def _log(self, label, timestamp):
         # Write to log_dictionary
         super()._log(label, timestamp)
+
+        if not self.adapt:
+            return
 
         target = self.log_dictionary['goal_target'][-1]
         target_position = np.array(target[:2])

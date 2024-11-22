@@ -14,7 +14,7 @@ import torch
 from PIL import Image
 
 from utils.models import MLP
-from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationIsoFitts, SCREEN_SIZE
+from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationFitts, SCREEN_SIZE
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
@@ -26,10 +26,6 @@ class Config:
     NUM_ADAPTATION_EPOCHS: ClassVar[int] = 5
     BATCH_SIZE: ClassVar[int] = 64
     LEARNING_RATE: ClassVar[float] = 2e-3
-    ADAPTATION_TIME: ClassVar[int] = 240    # (seconds)
-    VALIDATION_TIME: ClassVar[int] = 300 # (seconds)
-    NUM_TRIALS: ClassVar[int] = 2000  # set a large number so it will be triggered by time instead of trials
-    DWELL_TIME: ClassVar[float] = 2.0
     WINDOW_LENGTH_MS: ClassVar[int] = 150 #ms
     WINDOW_INCREMENT_MS: ClassVar[int] = 40 #ms
 
@@ -315,7 +311,7 @@ class Experiment:
         
         time.sleep(3)
         
-        while (time.perf_counter() - start_time) < self.config.ADAPTATION_TIME:
+        while (time.perf_counter() - start_time) < ADAPTATION_TIME:
             try:
                 data = smm.get_variable('memory_update_flag')[0, 0]
                 if data == WROTE:
@@ -425,15 +421,11 @@ class Experiment:
 
     def run_isofitts(self, online_data_handler):
         online_regressor = self.setup_online_model(online_data_handler)
-        controller = libemg.environments.controllers.RegressorController()
-        if self.config.stage == 'adaptation':
+        adapt = self.config.stage == 'adaptation'
+        if adapt:
             self.start_adapting(online_regressor.predictor)
-            isofitts = AdaptationIsoFitts(self.shared_memory_items, controller, num_trials=self.config.NUM_TRIALS,
-                                        dwell_time=self.config.DWELL_TIME, save_file=self.config.adaptation_fitts_file)
-        elif self.config.stage == 'validation':
-            isofitts = libemg.environments.fitts.PolarFitts(controller, num_trials=self.config.NUM_TRIALS,
-                                                                dwell_time=self.config.DWELL_TIME, save_file=self.config.validation_fitts_file,
-                                                                game_time=self.config.VALIDATION_TIME, width=SCREEN_SIZE, height=SCREEN_SIZE)
+            save_file = self.config.adaptation_fitts_file
         else:
-            raise ValueError(f"Stage {self.config.stage} should not run isofitts task.")
+            save_file = self.config.validation_fitts_file
+        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=adapt)
         isofitts.run()
