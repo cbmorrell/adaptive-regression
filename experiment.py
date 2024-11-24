@@ -14,7 +14,7 @@ import torch
 from PIL import Image
 
 from utils.models import MLP
-from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationFitts, SCREEN_SIZE
+from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationFitts, ADAPTATION_TIME
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
