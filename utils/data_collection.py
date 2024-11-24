@@ -57,7 +57,7 @@ class Device:
         elif 'sifi' in device:
             name = 'sifi'
             fs = 1500
-            streamer = lambda: libemg.streamers.sifi_bioarmband_streamer(ecg=False, eda=False, imu=False, ppg=False)
+            streamer = libemg.streamers.sifi_bioarmband_streamer
             num_channels = 8
         else:
             raise ValueError(f"Unexpected value for device. Got: {device}.")
