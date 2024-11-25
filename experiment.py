@@ -280,11 +280,12 @@ class Experiment:
 
     def start_adapting(self, emg_predictor):
         assert self.config.model_is_adaptive, f"Attempted to perform adaptation for non-adaptive model. Terminating script."
-        memoryProcess = Process(target=self._memory_manager, daemon=True)
-        memoryProcess.start()
+        memory_process = Process(target=self._memory_manager, daemon=True)
+        memory_process.start()
 
-        adaptProcess = Process(target=self._adapt_manager, daemon=True, args=(emg_predictor, ))
-        adaptProcess.start()
+        adapt_process = Process(target=self._adapt_manager, daemon=True, args=(emg_predictor, ))
+        adapt_process.start()
+        return memory_process, adapt_process
 
     def _adapt_manager(self, emg_predictor):
         if not self.config.model_is_adaptive:
@@ -423,9 +424,17 @@ class Experiment:
         online_regressor = self.setup_online_model(online_data_handler)
         adapt = self.config.stage == 'adaptation'
         if adapt:
-            self.start_adapting(online_regressor.predictor)
+            memory_process, adapt_process = self.start_adapting(online_regressor.predictor)
             save_file = self.config.adaptation_fitts_file
         else:
             save_file = self.config.validation_fitts_file
+            memory_process = None
+            adapt_process = None
         isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=adapt)
         isofitts.run()
+
+        if memory_process is not None:
+            memory_process.join()
+        
+        if adapt_process is not None:
+            adapt_process.join()
