@@ -182,7 +182,7 @@ def project_prediction(prediction, optimal_direction):
 def distance_to_proportional_control(euclidean_distance, method = 'sqrt'):
     # NOTE: These mappings were decided based on piloting
     if method == 'sqrt':
-        result = np.sqrt(euclidean_distance / 400)   # normalizing by half of distance between targets
+        result = np.sqrt(euclidean_distance / (SCREEN_SIZE / 2))   # normalizing by half of distance between targets
     elif method == 'sigmoid':
         result = 0.2 / (1 + np.exp(-0.05 * (euclidean_distance - 250)))
     else:
@@ -275,7 +275,7 @@ def make_pseudo_labels(environment_data, smm, approach):
         if adaptation_labels is not None:
             adaptation_labels *= distance_to_proportional_control(euclidean_distance) / np.linalg.norm(adaptation_labels, ord=np.inf)
 
-        # print(outcomes, prediction, adaptation_labels)
+    # print(outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
