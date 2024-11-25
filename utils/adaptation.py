@@ -13,7 +13,7 @@ WROTE = 1
 DONE_TASK = -10
 ADAPTATION_TIME = 240   # seconds
 VALIDATION_TIME = 300   # seconds
-SCREEN_SIZE = 800
+SCREEN_SIZE = 500
 
 
 class AdaptationFitts(libemg.environments.fitts.PolarFitts):
@@ -34,13 +34,10 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         if not self.draw_right:
             # Set left side of screen to positive quadrant so theta calculation is the same
             point[0] *= -1
-        # point[1] *= -1  # b/c pygame y is inverted
 
-        # Theta is the angle facing the bottom of the circle, so we calculate as if it's to the left/right then add/subtract pi/2 to put it in the correct range.
+        # Theta is the angle facing the bottom of the circle and goes from (0, pi)
         radius = np.linalg.norm(point)
-        # theta = math.atan(point[1] / point[0])  # will need a catch for division by 0
         theta = np.arctan2(point[0], point[1])
-        # theta += math.pi / 2    # keep in the range of (0, pi)
         return np.array([radius, theta])
 
     def _log(self, label, timestamp):
@@ -54,27 +51,13 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         target_position = np.array(target[:2])
         cursor_position = np.array(self.log_dictionary['cursor_position'][-1][:2])
         euclidean_distance = np.linalg.norm(target_position - cursor_position)
-        # optimal_direction = target_position - cursor_position
-        # optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
 
         # Convert to polar coordinates for PolarFitts (based on center of screen)
-        # polar_target_position = cartesian_to_polar(cursor_position - center_screen)
-        # polar_cursor_position = cartesian_to_polar(target_position - center_screen)
         polar_target_position = self._cartesian_to_polar(target_position)
         polar_cursor_position = self._cartesian_to_polar(cursor_position)
         optimal_direction = polar_target_position - polar_cursor_position
-        # radius_multiplier = -1 if np.linalg.norm(target_position - center_screen) < np.linalg.norm(cursor_position - center_screen) else 1
 
-        # optimal_polar_direction = cartesian_to_polar(optimal_direction)
-        # optimal_polar_direction[0] *= radius_multiplier
-        # optimal_polar_direction[1] -= self.theta * radius_multiplier    # subtract out the same theta
-        # TODO: Change optimal direction so it's calculated based on the center of the screen. We shouldn't be just converting the original direction to polar.
-        # If the target is straight up, then it would say you need to go [y, pi/2], but the actual difference should be in terms of the current theta and radius
-        # This is close, but you can end up with cases where the polar coorinate is outside the bounds of (pi/2, -pi/2) (like if the target is to the bottom left of the cursor).
-        # I guess the proper way is probably to say: get polar coordinates of target and cursor then subtract?
-
-
-        output = np.array([timestamp, optimal_direction[0], optimal_direction[1], euclidean_distance, target[2]], dtype=np.double)
+        output = np.array([timestamp, optimal_direction[0], optimal_direction[1], euclidean_distance, target[2] // 2], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
         if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
             self.done = True
@@ -292,7 +275,7 @@ def make_pseudo_labels(environment_data, smm, approach):
         if adaptation_labels is not None:
             adaptation_labels *= distance_to_proportional_control(euclidean_distance) / np.linalg.norm(adaptation_labels, ord=np.inf)
 
-        print(outcomes, prediction, adaptation_labels)
+        # print(outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
