@@ -13,7 +13,7 @@ WROTE = 1
 DONE_TASK = -10
 ADAPTATION_TIME = 240   # seconds
 VALIDATION_TIME = 300   # seconds
-SCREEN_SIZE = 500
+SCREEN_SIZE = 800
 
 
 class AdaptationFitts(libemg.environments.fitts.PolarFitts):
