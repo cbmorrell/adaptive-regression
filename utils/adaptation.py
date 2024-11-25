@@ -21,10 +21,26 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         controller = libemg.environments.controllers.RegressorController()
         game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
         super().__init__(controller, num_trials=2000, dwell_time=2.0, save_file=save_file, fps=60, width=SCREEN_SIZE, height=SCREEN_SIZE, game_time=game_time)
+        self.center_screen = np.array([self.width // 2, self.height // 2])
         self.adapt = adapt
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
         for sm_item in shared_memory_items:
             self.smm.create_variable(*sm_item)
+
+    def _cartesian_to_polar(self, point):
+        # Center point to calculate coordinate like PolarFitts does
+        point = point - self.center_screen
+        if not self.draw_right:
+            # Set left side of screen to positive quadrant so theta calculation is the same
+            point[0] *= -1
+        # point[1] *= -1  # b/c pygame y is inverted
+
+        # Theta is the angle facing the bottom of the circle, so we calculate as if it's to the left/right then add/subtract pi/2 to put it in the correct range.
+        radius = np.linalg.norm(point)
+        # theta = math.atan(point[1] / point[0])  # will need a catch for division by 0
+        theta = np.arctan2(point[0], point[1])
+        # theta += math.pi / 2    # keep in the range of (0, pi)
+        return np.array([radius, theta])
 
     def _log(self, label, timestamp):
         # Write to log_dictionary
@@ -40,9 +56,10 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         # optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
 
         # Convert to polar coordinates for PolarFitts (based on center of screen)
-        center_screen = np.array([self.width // 2, self.height // 2])
-        polar_target_position = cartesian_to_polar(cursor_position - center_screen)
-        polar_cursor_position = cartesian_to_polar(target_position - center_screen)
+        # polar_target_position = cartesian_to_polar(cursor_position - center_screen)
+        # polar_cursor_position = cartesian_to_polar(target_position - center_screen)
+        polar_target_position = self._cartesian_to_polar(target_position)
+        polar_cursor_position = self._cartesian_to_polar(cursor_position)
         optimal_direction = polar_target_position - polar_cursor_position
         # radius_multiplier = -1 if np.linalg.norm(target_position - center_screen) < np.linalg.norm(cursor_position - center_screen) else 1
 
@@ -196,12 +213,6 @@ def polar_to_cartesian(p):
     x = r * np.cos(theta)
     y = r * np.sin(theta)
     return np.array([x, y])
-
-
-def cartesian_to_polar(p):
-    r = np.linalg.norm(p)
-    theta = math.atan2(p[1], p[0])
-    return np.array([r, theta])
 
 
 def theta_to_label(theta):
