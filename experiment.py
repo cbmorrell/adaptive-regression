@@ -32,6 +32,7 @@ class Config:
     subject_id: str
     stage: str
     device: Device
+    model_type: str | None = None
     features: list = field(init=False, repr=False, default_factory=lambda: ['WENG'])
 
     @property
@@ -66,6 +67,9 @@ class Config:
 
     @property
     def model(self):
+        if self.model_type is not None:
+            # Specified model, so we use that instead of the latin square (for debugging and analysis)
+            return self.model_type
         # Balanced latin square for 4 conditions
         conditions = np.array(['ciil', 'combined-sgt', 'oracle', 'within-sgt'])
         latin_square = np.array([
@@ -184,7 +188,11 @@ class Experiment:
 
     def load_sgt_data(self):
         # parse offline data into an offline data handler
-        package_function = lambda x, y: Path(x).parent == Path(y).parent and x[2] == y[2]
+        def package_function(x, y):
+            x_path = Path(x)
+            y_path = Path(y)
+            return x_path.parent == y_path.parent and x_path.name[2] == y_path.name[2]
+
         metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/C_', ".txt", ['0', '1'], "labels"), package_function)]
             
         offdh = libemg.data_handler.OfflineDataHandler()
