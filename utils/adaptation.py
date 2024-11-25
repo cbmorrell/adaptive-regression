@@ -20,6 +20,7 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
     def __init__(self, shared_memory_items, save_file: str, adapt: bool):
         controller = libemg.environments.controllers.RegressorController()
         game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
+        # TODO: Handle sides
         super().__init__(controller, num_trials=2000, dwell_time=2.0, save_file=save_file, fps=60, width=SCREEN_SIZE, height=SCREEN_SIZE, game_time=game_time)
         self.center_screen = np.array([self.width // 2, self.height // 2])
         self.adapt = adapt
@@ -52,6 +53,7 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         target = self.log_dictionary['goal_target'][-1]
         target_position = np.array(target[:2])
         cursor_position = np.array(self.log_dictionary['cursor_position'][-1][:2])
+        euclidean_distance = np.linalg.norm(target_position - cursor_position)
         # optimal_direction = target_position - cursor_position
         # optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
 
@@ -72,7 +74,7 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         # I guess the proper way is probably to say: get polar coordinates of target and cursor then subtract?
 
 
-        output = np.array([timestamp, optimal_direction[0], optimal_direction[1], target[2]], dtype=np.double)
+        output = np.array([timestamp, optimal_direction[0], optimal_direction[1], euclidean_distance, target[2]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
         if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
             self.done = True
@@ -194,14 +196,12 @@ def project_prediction(prediction, optimal_direction):
     return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
 
 
-def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
-    # Convert back to cartesian since we're dealing with distance to target
+def distance_to_proportional_control(euclidean_distance, method = 'sqrt'):
     # NOTE: These mappings were decided based on piloting
-    # TODO: Need to fix this now that we're doing polar (and not ISO fitts)
     if method == 'sqrt':
-        result = np.sqrt(np.linalg.norm(optimal_direction / 400))   # normalizing by half of distance between targets
+        result = np.sqrt(euclidean_distance / 400)   # normalizing by half of distance between targets
     elif method == 'sigmoid':
-        result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))
+        result = 0.2 / (1 + np.exp(-0.05 * (euclidean_distance - 250)))
     else:
         raise ValueError(f"Unexpected value for method. Got: {method}.")
     return min(1, result)   # bound result to 1
@@ -241,8 +241,6 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
 
     # Normalize to correct magnitude
     # p = inf b/c (1, 1) should move the same speed as (1, 0)
-    adaptation_labels *= distance_to_proportional_control(polar_to_cartesian(optimal_direction)) / np.linalg.norm(adaptation_labels, ord=np.inf)
-    print(positive_mask, prediction, adaptation_labels)
     return adaptation_labels
 
 
@@ -252,13 +250,13 @@ def assign_oracle_label(optimal_direction):
     # so we don't project here.
     adaptation_labels = np.copy(optimal_direction)
     adaptation_labels[1] = theta_to_label(adaptation_labels[1])
-    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
     return adaptation_labels
 
 
 def make_pseudo_labels(environment_data, smm, approach):
     timestamp = environment_data[0]
-    optimal_direction = environment_data[1:-1]    # in Polar coordinates
+    optimal_direction = environment_data[1:3]    # in Polar coordinates
+    euclidean_distance = environment_data[-2]
     target_radius = environment_data[-1]
 
     # find the features: data - timestamps, <- features ->
@@ -273,7 +271,7 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    if np.abs(optimal_direction[0]) < target_radius:
+    if euclidean_distance < target_radius:
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
@@ -291,6 +289,10 @@ def make_pseudo_labels(environment_data, smm, approach):
         else:
             raise ValueError(f"Unexpected value for approach. Got: {approach}.")
 
+        if adaptation_labels is not None:
+            adaptation_labels *= distance_to_proportional_control(euclidean_distance) / np.linalg.norm(adaptation_labels, ord=np.inf)
+
+        print(outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
