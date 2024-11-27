@@ -13,18 +13,26 @@ WROTE = 1
 DONE_TASK = -10
 ADAPTATION_TIME = 240   # seconds
 VALIDATION_TIME = 300   # seconds
-TARGET_RADIUS = 40
-ISOFITTS_RADIUS = 275
+TARGET_RADIUS = 40  # pixels
+ISOFITTS_RADIUS = 275   # pixels
 
 
 class AdaptationFitts(libemg.environments.fitts.ISOFitts):
     def __init__(self, shared_memory_items, save_file: str, adapt: bool, mapping: str):
         controller = libemg.environments.controllers.RegressorController()
         game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
-        super().__init__(controller, num_targets=8, num_trials=2000, dwell_time=2.0, save_file=save_file, fps=60,
-                         width=1500, height=750, target_radius=TARGET_RADIUS, target_distance_radius=ISOFITTS_RADIUS, 
-                         game_time=game_time, mapping=mapping)
-        self.center_screen = np.array([self.width // 2, self.height // 2])
+        config = libemg.environments.fitts.FittsConfig(
+            num_trials=2000,    # set to high number so task stops based on time instead of trials
+            dwell_time=2.0,
+            save_file=save_file,
+            fps=60,
+            width=1500,
+            height=750,
+            target_radius=TARGET_RADIUS,
+            game_time=game_time,
+            mapping=mapping
+        )
+        super().__init__(controller, config, num_targets=8, target_distance_radius=ISOFITTS_RADIUS)
         self.adapt = adapt
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
         for sm_item in shared_memory_items:
