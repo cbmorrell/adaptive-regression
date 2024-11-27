@@ -141,6 +141,7 @@ def plot_fitts_metrics(participants):
     axs[0].set_ylabel('Throughput')
     axs[1].set_ylabel('Path Efficiency')
     axs[2].set_ylabel('Overshoots')
+    fig.suptitle('Usability Metrics')
     
 
 
