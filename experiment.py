@@ -150,6 +150,12 @@ class Config:
             json.dump(asdict(self), f)
         print('Saved to: ', config_file.as_posix())
 
+    @staticmethod
+    def load(filename):
+        with open(filename, 'r') as f:
+            config = Config(**json.load(f))
+        return config
+
 
 class Experiment:
     def __init__(self, config: Config, stage: str):
