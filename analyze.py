@@ -121,8 +121,7 @@ def plot_fitts_metrics(participants):
         model_efficiencies = []
         model_overshoots = []
         for participant in participants:
-            # fitts_file = Path('data', participant)
-            config = Config(participant, 'sgt', Device('myo'), model_type=model)
+            config = Config.load(Path('data', participant, model, 'config.json'))       
             run_log = read_pickle_file(config.validation_fitts_file)
             fitts_metrics = extract_fitts_metrics(run_log)
             model_throughputs.append(fitts_metrics['throughput'])

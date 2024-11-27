@@ -32,8 +32,7 @@ def main():
         config.save()
         return
 
-    with open(args.config_path, 'r') as f:
-        config = Config(**json.load(f))
+    config = Config.load(args.config_path)
 
     experiment = Experiment(config, args.stage)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
