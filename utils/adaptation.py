@@ -13,32 +13,22 @@ WROTE = 1
 DONE_TASK = -10
 ADAPTATION_TIME = 240   # seconds
 VALIDATION_TIME = 300   # seconds
-SCREEN_SIZE = 800
+TARGET_RADIUS = 40
+ISOFITTS_RADIUS = 275
 
 
-class AdaptationFitts(libemg.environments.fitts.PolarFitts):
-    def __init__(self, shared_memory_items, save_file: str, adapt: bool):
+class AdaptationFitts(libemg.environments.fitts.ISOFitts):
+    def __init__(self, shared_memory_items, save_file: str, adapt: bool, mapping: str):
         controller = libemg.environments.controllers.RegressorController()
         game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
-        # TODO: Handle sides
-        super().__init__(controller, num_trials=2000, dwell_time=2.0, save_file=save_file, fps=60, width=SCREEN_SIZE, height=SCREEN_SIZE, game_time=game_time)
+        super().__init__(controller, num_targets=8, num_trials=2000, dwell_time=2.0, save_file=save_file, fps=60,
+                         width=1500, height=750, target_radius=TARGET_RADIUS, target_distance_radius=ISOFITTS_RADIUS, 
+                         game_time=game_time, mapping=mapping)
         self.center_screen = np.array([self.width // 2, self.height // 2])
         self.adapt = adapt
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
         for sm_item in shared_memory_items:
             self.smm.create_variable(*sm_item)
-
-    def _cartesian_to_polar(self, point):
-        # Center point to calculate coordinate like PolarFitts does
-        point = point - self.center_screen
-        if not self.draw_right:
-            # Set left side of screen to positive quadrant so theta calculation is the same
-            point[0] *= -1
-
-        # Theta is the angle facing the bottom of the circle and goes from (0, pi)
-        radius = np.linalg.norm(point)
-        theta = np.arctan2(point[0], point[1])
-        return np.array([radius, theta])
 
     def _log(self, label, timestamp):
         # Write to log_dictionary
@@ -47,17 +37,10 @@ class AdaptationFitts(libemg.environments.fitts.PolarFitts):
         if not self.adapt:
             return
 
-        target = self.log_dictionary['goal_target'][-1]
-        target_position = np.array(target[:2])
-        cursor_position = np.array(self.log_dictionary['cursor_position'][-1][:2])
-        euclidean_distance = np.linalg.norm(target_position - cursor_position)
-
-        # Convert to polar coordinates for PolarFitts (based on center of screen)
-        polar_target_position = self._cartesian_to_polar(target_position)
-        polar_cursor_position = self._cartesian_to_polar(cursor_position)
-        optimal_direction = polar_target_position - polar_cursor_position
-
-        output = np.array([timestamp, optimal_direction[0], optimal_direction[1], euclidean_distance, target[2] // 2], dtype=np.double)
+        # Want to send the timestamp and the optimal direction
+        optimal_direction = np.array(self.log_dictionary['goal_target'][-1]) - np.array(self.log_dictionary['cursor_position'][-1])
+        optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
+        output = np.array([timestamp, optimal_direction[0], optimal_direction[1]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
         if self.smm.get_variable('memory_update_flag')[0, 0] == DONE_TASK:
             self.done = True
@@ -179,32 +162,18 @@ def project_prediction(prediction, optimal_direction):
     return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
 
 
-def distance_to_proportional_control(euclidean_distance, method = 'sqrt'):
+def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
     # NOTE: These mappings were decided based on piloting
     if method == 'sqrt':
-        result = np.sqrt(euclidean_distance / (SCREEN_SIZE / 2))   # normalizing by half of distance between targets
+        result = np.sqrt(np.linalg.norm(optimal_direction / ISOFITTS_RADIUS))   # normalizing by half of distance between targets
     elif method == 'sigmoid':
-        result = 0.2 / (1 + np.exp(-0.05 * (euclidean_distance - 250)))
+        result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))
     else:
         raise ValueError(f"Unexpected value for method. Got: {method}.")
     return min(1, result)   # bound result to 1
 
 
-def polar_to_cartesian(p):
-    r = p[0]
-    theta = p[1]
-    x = r * np.cos(theta)
-    y = r * np.sin(theta)
-    return np.array([x, y])
-
-
-def theta_to_label(theta):
-    # Based on how predictions are mapped to theta in PolarFitts
-    return theta * 0.5 * SCREEN_SIZE / math.pi
-
-
 def assign_ciil_label(prediction, optimal_direction, outcomes):
-    # TODO: Should we make it so if you're in line with a target in any dimension, then you're always setting the other dimension to 0 in the pseudo labels?
     positive_mask = outcomes == 'P'
     num_positive_components = positive_mask.sum()
     if num_positive_components == 2:
@@ -217,30 +186,14 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
         adaptation_labels[~positive_mask] = 0.
     else:
         # Wrong quadrant - ignore this
-        return None
+        adaptation_labels = None
 
-    # Convert polar to labels (based on how we handle predictions in PolarFitts)
-    adaptation_labels[1] = theta_to_label(adaptation_labels[1])
-
-    # Normalize to correct magnitude
-    # p = inf b/c (1, 1) should move the same speed as (1, 0)
-    return adaptation_labels
-
-
-def assign_oracle_label(optimal_direction):
-    # NOTE: Whether or not we project the prediction or just use the optimal direction gives different results.
-    # I think we can argue that other approaches don't factor in the prediction when making the pseudo labels and just assume that the user is in the optimal direction,
-    # so we don't project here.
-    adaptation_labels = np.copy(optimal_direction)
-    adaptation_labels[1] = theta_to_label(adaptation_labels[1])
     return adaptation_labels
 
 
 def make_pseudo_labels(environment_data, smm, approach):
     timestamp = environment_data[0]
-    optimal_direction = environment_data[1:3]    # in Polar coordinates
-    euclidean_distance = environment_data[-2]
-    target_radius = environment_data[-1]
+    optimal_direction = environment_data[1:]
 
     # find the features: data - timestamps, <- features ->
     feature_data = smm.get_variable("model_input")
@@ -254,7 +207,7 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    if euclidean_distance < target_radius:
+    if np.linalg.norm(optimal_direction) < TARGET_RADIUS:
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
@@ -268,12 +221,13 @@ def make_pseudo_labels(environment_data, smm, approach):
         if approach == 'ciil':
             adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)
         elif approach == 'oracle':
-            adaptation_labels = assign_oracle_label(optimal_direction)
+            adaptation_labels = np.copy(optimal_direction)
         else:
             raise ValueError(f"Unexpected value for approach. Got: {approach}.")
 
         if adaptation_labels is not None:
-            adaptation_labels *= distance_to_proportional_control(euclidean_distance) / np.linalg.norm(adaptation_labels, ord=np.inf)
+            # Normalize to correct magnitude - p = inf b/c (1, 1) should move the same speed as (1, 0)
+            adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
 
     # print(outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
