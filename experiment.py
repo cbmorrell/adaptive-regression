@@ -53,9 +53,11 @@ class Config:
         return int((self.WINDOW_INCREMENT_MS*self.device.fs)/1000)
 
     @property
-    def log_to_file(self):
-        # Do we want to log during user learning phase too????
-        return self.stage != 'sgt'
+    def emg_log_filepath(self):
+        # Store emg.csv files separately for adaptation and validation
+        if self.stage == 'sgt':
+            return None
+        return Path(self.data_directory, f"{self.stage}_").as_posix()
 
     @property
     def feature_dictionary(self):
@@ -243,8 +245,8 @@ class Experiment:
         if self.config.stage != 'sgt':
             # Only want raw data during SGT
             odh.install_filter(self.fi)
-        if self.config.log_to_file:
-            odh.log_to_file(file_path=self.config.data_directory + '/')
+        if self.config.emg_log_filepath is not None:
+            odh.log_to_file(file_path=self.config.emg_log_filepath)
         return odh, p
 
     def start_sgt(self, online_data_handler):
