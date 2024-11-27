@@ -30,6 +30,7 @@ class Config:
     WINDOW_INCREMENT_MS: ClassVar[int] = 40 #ms
 
     subject_id: str
+    dominant_hand: str
     stage: str
     device: Device
     model_type: str | None = None
@@ -131,6 +132,15 @@ class Config:
     @property
     def validation_fitts_file(self):
         return Path(self.sgt_model_file).with_name('val_fitts.pkl').as_posix()
+
+    @property
+    def mapping(self):
+        if self.dominant_hand == 'right':
+            return 'polar-'
+        elif self.dominant_hand == 'left':
+            return 'polar+'
+        else:
+            raise ValueError(f"Unexpected value for handedness. Got: {self.dominant_hand}.")
 
 
 class Experiment:
@@ -440,7 +450,7 @@ class Experiment:
             save_file = self.config.validation_fitts_file
             memory_process = None
             adapt_process = None
-        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=adapt)
+        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=adapt, mapping=self.config.mapping)
         isofitts.run()
 
         if memory_process is not None:
