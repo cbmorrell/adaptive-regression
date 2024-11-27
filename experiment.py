@@ -1,10 +1,11 @@
+import json
 import shutil
 import time
 from pathlib import Path
 from multiprocessing import Lock, Process
 import logging
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass, asdict
 from typing import ClassVar
 
 import libemg
@@ -29,12 +30,23 @@ class Config:
     WINDOW_LENGTH_MS: ClassVar[int] = 150 #ms
     WINDOW_INCREMENT_MS: ClassVar[int] = 40 #ms
 
-    subject_id: str
+    subject_directory: str
     dominant_hand: str
-    stage: str
-    device: Device
-    model_type: str | None = None
-    features: list = field(init=False, repr=False, default_factory=lambda: ['WENG'])
+    device_name: str
+    condition_idx: int
+
+    def __post_init__(self):
+        Path(self.subject_directory).mkdir(parents=True, exist_ok=True)
+
+        # Check for latin square order
+        condition_order = self.condition_order
+        completed_models = [path.stem for path in Path(self.subject_directory).glob('*') if path.is_dir() and path.stem in condition_order and any(path.iterdir()) and path.stem != self.model]
+        expected_models = condition_order[:self.condition_idx]
+        assert set(completed_models) == set(expected_models), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
+
+    @property
+    def device(self):
+        return Device(self.device_name)
 
     @property
     def model_is_adaptive(self):
@@ -54,25 +66,19 @@ class Config:
         return int((self.WINDOW_INCREMENT_MS*self.device.fs)/1000)
 
     @property
-    def emg_log_filepath(self):
-        # Store emg.csv files separately for adaptation and validation
-        if self.stage == 'sgt':
-            return None
-        return Path(self.data_directory, f"{self.stage}_").as_posix()
+    def features(self):
+        return ['WENG']
 
     @property
     def feature_dictionary(self):
         return {'WENG_fs': self.device.fs}
 
     @property
-    def subject_directory(self):
-        return Path('data', self.subject_id)
+    def subject_id(self):
+        return Path(self.subject_directory).stem
 
     @property
-    def model(self):
-        if self.model_type is not None:
-            # Specified model, so we use that instead of the latin square (for debugging and analysis)
-            return self.model_type
+    def condition_order(self):
         # Balanced latin square for 4 conditions
         conditions = np.array(['ciil', 'combined-sgt', 'oracle', 'within-sgt'])
         latin_square = np.array([
@@ -83,20 +89,15 @@ class Config:
         ])
 
         # Determine model based on latin square
-        subject_idx = (int(self.subject_id[-3:]) - 1) % len(latin_square)
-        condition_order = latin_square[subject_idx]
-        ordered_models = conditions[condition_order]
-        completed_models = [path.stem for path in self.subject_directory.glob('*') if path.is_dir() and path.stem in ordered_models and any(path.iterdir())]
-        expected_models = ordered_models[:len(completed_models)]
-        assert np.all(np.sort(completed_models) == np.sort(expected_models)), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
+        subject_id = Path(self.subject_directory).stem
+        subject_idx = (int(subject_id[-3:]) - 1) % len(latin_square)
+        condition_idx_order = latin_square[subject_idx]
+        return conditions[condition_idx_order]
 
-        if self.stage == 'sgt':
-            model = ordered_models[len(completed_models)]
-        else:
-            assert len(completed_models) >= 1, f"Got 0 completed models. Please perform SGT first."
-            model = ordered_models[len(completed_models) - 1]
-        return model
-
+    @property
+    def model(self):
+        return self.condition_order[self.condition_idx]
+    
     @property
     def use_combined_data(self):
         return 'combined' in self.model
@@ -111,7 +112,7 @@ class Config:
 
     @property
     def data_directory(self):
-        return self.subject_directory.joinpath(self.model).absolute().as_posix()
+        return Path(self.subject_directory, self.model).absolute().as_posix()
 
     @property
     def num_reps(self):
@@ -142,10 +143,40 @@ class Config:
         else:
             raise ValueError(f"Unexpected value for handedness. Got: {self.dominant_hand}.")
 
+    def save(self):
+        config_file = Path(self.sgt_model_file).with_name('config.json')
+        config_file.parent.mkdir(parents=True, exist_ok=False) # if the path already exists we'd have a latin square error, so throw an error
+        with open(config_file, 'w') as f:
+            json.dump(asdict(self), f)
+        print('Saved to: ', config_file.as_posix())
+
 
 class Experiment:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, stage: str):
         self.config = config
+        self.stage = stage
+        if self.stage == 'sgt':
+            self.emg_log_filepath = None
+            self.model_file = None
+            self.install_filter = False
+            self.adapt = False
+        elif self.stage == 'adaptation':
+            self.emg_log_filepath = Path(self.config.data_directory, "adaptation_").as_posix()
+            self.model_file = self.config.sgt_model_file
+            self.install_filter = True
+            self.adapt = True
+        elif self.stage == 'validation':
+            self.emg_log_filepath = Path(self.config.data_directory, "validation_").as_posix()
+            self.model_file = self.config.adaptation_model_file if self.config.model_is_adaptive else self.config.sgt_model_file    # only adaptive models have an adaptation model file
+            self.install_filter = True
+            self.adapt = False
+
+
+        fe = libemg.feature_extractor.FeatureExtractor()
+        fake_window = np.random.randn(1,self.config.device.num_channels,self.config.window_length)
+        returned_features = fe.extract_features(self.config.features, fake_window, self.config.feature_dictionary)
+        self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
+
         self.fi = libemg.filtering.Filter(self.config.device.fs)
         self.fi.install_common_filters()
 
@@ -158,28 +189,15 @@ class Experiment:
         for item in self.shared_memory_items:
             item.append(Lock())
 
-
-
-    @property
-    def input_shape(self):
-        fe = libemg.feature_extractor.FeatureExtractor()
-        fake_window = np.random.randn(1,self.config.device.num_channels,self.config.window_length)
-        returned_features = fe.extract_features(self.config.features, fake_window, self.config.feature_dictionary)
-        return sum([returned_features[key].shape[1] for key in returned_features.keys()])
-
     def setup_online_model(self, online_data_handler):
+        if self.model_file is None or self.emg_log_filepath is None:
+            raise ValueError(f"Stage {self.stage} should not use an online model (model_file is None).")
         self.prepare_model_from_sgt()
-        if self.config.stage == 'adaptation':
-            model_file = self.config.sgt_model_file
-        elif self.config.stage == 'validation':
-            model_file = self.config.adaptation_model_file if self.config.model_is_adaptive else self.config.sgt_model_file
-        else:
-            raise ValueError(f"Stage {self.config.stage} should not use an online model.")
 
-        if not Path(model_file).exists():
-            raise FileNotFoundError(f"{model_file} not found.")
+        if not Path(self.model_file).exists():
+            raise FileNotFoundError(f"Model file {self.model_file} not found.")
 
-        with open(model_file, 'rb') as handle:
+        with open(self.model_file, 'rb') as handle:
             loaded_mdl = pickle.load(handle)
 
         model = libemg.emg_predictor.OnlineEMGRegressor(
@@ -188,7 +206,7 @@ class Experiment:
             window_increment=self.config.window_increment,
             online_data_handler=online_data_handler,
             features=self.config.features,
-            file_path=Path(self.config.sgt_model_file).parent.as_posix() + '/', # '/' needed to store model_output.txt in correct directory
+            file_path=self.emg_log_filepath,
             file=True,
             smm=self.config.model_is_adaptive,
             smm_items=self.shared_memory_items,
@@ -252,11 +270,11 @@ class Experiment:
     def setup_live_processing(self):
         p, smi = self.config.device.stream()
         odh = libemg.data_handler.OnlineDataHandler(shared_memory_items=smi)    # can't make this a field b/c pickling will throw an error
-        if self.config.stage != 'sgt':
+        if self.install_filter:
             # Only want raw data during SGT
             odh.install_filter(self.fi)
-        if self.config.emg_log_filepath is not None:
-            odh.log_to_file(file_path=self.config.emg_log_filepath)
+        if self.emg_log_filepath is not None:
+            odh.log_to_file(file_path=self.emg_log_filepath)
         return odh, p
 
     def start_sgt(self, online_data_handler):
@@ -442,15 +460,14 @@ class Experiment:
 
     def run_isofitts(self, online_data_handler):
         online_regressor = self.setup_online_model(online_data_handler)
-        adapt = self.config.stage == 'adaptation'
-        if adapt:
+        if self.adapt:
             memory_process, adapt_process = self.start_adapting(online_regressor.predictor)
             save_file = self.config.adaptation_fitts_file
         else:
             save_file = self.config.validation_fitts_file
             memory_process = None
             adapt_process = None
-        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=adapt, mapping=self.config.mapping)
+        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=self.adapt, mapping=self.config.mapping)
         isofitts.run()
 
         if memory_process is not None:
