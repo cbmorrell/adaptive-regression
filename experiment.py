@@ -38,12 +38,6 @@ class Config:
     def __post_init__(self):
         Path(self.subject_directory).mkdir(parents=True, exist_ok=True)
 
-        # Check for latin square order
-        condition_order = self.condition_order
-        completed_models = [path.stem for path in Path(self.subject_directory).glob('*') if path.is_dir() and path.stem in condition_order and any(path.iterdir()) and path.stem != self.model]
-        expected_models = condition_order[:self.condition_idx]
-        assert set(completed_models) == set(expected_models), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
-
     @property
     def device(self):
         return Device(self.device_name)
@@ -165,6 +159,13 @@ class Config:
 class Experiment:
     def __init__(self, config: Config, stage: str):
         self.config = config
+
+        # Check for latin square order
+        completed_models = [path.stem for path in Path(self.config.subject_directory).glob('*') 
+                            if path.is_dir() and path.stem in self.config.condition_order and any(path.iterdir()) and path.stem != self.config.model]
+        expected_models = self.config.condition_order[:self.config.condition_idx]
+        assert set(completed_models) == set(expected_models), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
+
         self.stage = stage
         if self.stage == 'sgt':
             self.emg_log_filepath = None
