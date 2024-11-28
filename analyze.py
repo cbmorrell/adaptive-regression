@@ -11,6 +11,10 @@ from libemg.environments.controllers import RegressorController
 from experiment import Config, MODELS
 
 
+RESULTS_PATH = Path('results')
+DPI = 600
+
+
 def read_pickle_file(filename):
     with open(filename, 'rb') as f:
         file_data = pickle.load(f)
@@ -153,6 +157,7 @@ def plot_fitts_metrics(participants):
     axs[1].set_ylabel('Path Efficiency')
     axs[2].set_ylabel('Overshoots')
     fig.suptitle('Usability Metrics')
+    fig.savefig(RESULTS_PATH.joinpath('fitts.png'), dpi=DPI)
     
 
 def main():
@@ -168,6 +173,7 @@ def main():
     else:
         participants = str(args.participants).replace(' ', '').split(',')
 
+    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     plot_fitts_metrics(participants)
         
