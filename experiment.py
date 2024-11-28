@@ -385,7 +385,7 @@ class Experiment:
                     del_t = time.perf_counter() - t1
                     logging.info(f"ADAPTMANAGER: ADAPTED - round {adapt_round}; \tADAPT TIME: {del_t:.2f}s")
                     
-                    with open(Path(self.config.data_directory, 'mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
+                    with open(Path(self.config.data_directory, 'adaptation_mdl' + str(adapt_round) + '.pkl'), 'wb') as handle:
                         pickle.dump(emg_predictor, handle)
 
                     smm.modify_variable("adapt_flag", lambda x: adapt_round)
