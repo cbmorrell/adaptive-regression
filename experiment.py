@@ -116,7 +116,12 @@ class Config:
 
     @property
     def num_reps(self):
-        return 1 if self.model_is_adaptive else 5
+        if self.model_is_adaptive:
+            return 1
+        elif 'combined' in self.model:
+            return 3    # 3 of each video
+        else:
+            return 6    # 6 50-second videos makes 5 minutes
 
     @property
     def sgt_model_file(self):

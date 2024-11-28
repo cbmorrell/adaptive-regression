@@ -11,7 +11,7 @@ import libemg
 WAITING = 0
 WROTE = 1
 DONE_TASK = -10
-ADAPTATION_TIME = 240   # seconds
+ADAPTATION_TIME = 250   # seconds
 VALIDATION_TIME = 300   # seconds
 TARGET_RADIUS = 40  # pixels
 ISOFITTS_RADIUS = 275   # pixels
