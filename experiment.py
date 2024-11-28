@@ -19,6 +19,9 @@ from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labe
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
+MODELS = ('ciil', 'combined-sgt', 'oracle', 'within-sgt')
+
+
 @dataclass(frozen=True)
 class Config:
     LOSS_FUNCTION: ClassVar[str] = 'L1'
@@ -74,7 +77,7 @@ class Config:
     @property
     def condition_order(self):
         # Balanced latin square for 4 conditions
-        conditions = np.array(['ciil', 'combined-sgt', 'oracle', 'within-sgt'])
+        conditions = np.array(MODELS)
         latin_square = np.array([
             [0, 1, 2, 3],
             [1, 2, 0, 3],
