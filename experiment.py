@@ -402,7 +402,7 @@ class Experiment:
             print("AdaptManager Finished!")
             smm.modify_variable('memory_update_flag', lambda _: DONE_TASK)
             memory.write(self.config.data_directory, 1000)
-            with open(Path(self.config.data_directory, 'ad_mdl.pkl'), 'wb') as handle:
+            with open(self.config.adaptation_model_file, 'wb') as handle:
                 pickle.dump(emg_predictor, handle)
 
     def _memory_manager(self):
