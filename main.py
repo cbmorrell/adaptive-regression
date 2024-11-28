@@ -1,10 +1,6 @@
 import argparse
-from pathlib import Path
-import json
 
 import libemg
-import numpy as np
-from utils.data_collection import Device
 
 from experiment import Experiment, Config
 
@@ -39,7 +35,7 @@ def main():
     for sm_item in experiment.shared_memory_items:
         smm.create_variable(*sm_item)
 
-    online_data_handler, p = experiment.setup_live_processing()
+    online_data_handler, _ = experiment.setup_live_processing()
     if args.analyze:
         online_data_handler.analyze_hardware()
     
