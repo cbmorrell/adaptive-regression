@@ -225,6 +225,8 @@ def make_pseudo_labels(environment_data, smm, approach):
         # We could probably do something else naive and say that the user is comfortable giving half the radius as a buffer, but that's kind of random.
         
     else:
+        # outcomes = np.array(['P' if np.sign(prediction_component) == np.sign(direction_component) and np.abs(direction_component) > TARGET_RADIUS else 'N'
+        #                      for prediction_component, direction_component in zip(prediction, optimal_direction)])
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
         if approach == 'ciil':
             adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)

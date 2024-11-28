@@ -45,6 +45,9 @@ def main():
     else:
         experiment.run_isofitts(online_data_handler)
 
+    # TODO: Should we add that context to CIIL where if it's in the target radius it's always 0 in that direction?
+    # TODO: Erik also mentioned maybe prompting the user with the rotational fitts interface instead of the cartesian prompt
+
     print('------------------Main script complete------------------')
 
 
