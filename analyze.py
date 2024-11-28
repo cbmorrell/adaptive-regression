@@ -1,13 +1,14 @@
 from pathlib import Path
 import math
 import pickle
+from argparse import ArgumentParser
 
+import libemg
 import numpy as np
 import matplotlib.pyplot as plt
 from libemg.environments.controllers import RegressorController
 
-from utils.data_collection import Device
-from experiment import Config
+from experiment import Config, MODELS
 
 
 def read_pickle_file(filename):
@@ -33,8 +34,6 @@ def calculate_efficiency(run_log, trial_mask):
 
 
 def calculate_throughput(run_log, trial_mask):
-    # See https://www.yorku.ca/mack/hhci2018.html for explanation of effective width and TP calculation
-    # raise NotImplementedError('Need to make sure this factors in the width of the target.')
     trial_time = run_log['global_clock'][trial_mask[-1]] - run_log['global_clock'][trial_mask[0]]
     starting_cursor_position = (run_log['cursor_position'][trial_mask[0]])[0:2]
     target = run_log['goal_target'][trial_mask[0]]
@@ -111,12 +110,25 @@ def extract_fitts_metrics(run_log):
     return summary_metrics
 
 
+def plot_pilot_distance_vs_proportional_control():
+    # NOTE: Used to determine appropriate distance to proportional control mapping during piloting
+    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-003/ciil/val_fitts.pkl', 'rb') as f:
+        ciil_data = pickle.load(f)
+
+    predictions = np.linalg.norm(ciil_data['current_direction'], axis=1) / 25
+    target_positions = np.array(ciil_data['goal_target'])[:, :2]
+    cursor_positions = np.array(ciil_data['cursor_position'])[:, :2]
+    distances = np.linalg.norm(target_positions - cursor_positions, axis=1)
+
+    plt.figure()
+    plt.scatter(distances, predictions)
+
+
 def plot_fitts_metrics(participants):
-    models = ['ciil', 'combined-sgt', 'oracle', 'within-sgt']
     throughputs = []
     efficiencies = []
     overshoots = []
-    for model in models:
+    for model in MODELS:
         model_throughputs = []
         model_efficiencies = []
         model_overshoots = []
@@ -133,9 +145,9 @@ def plot_fitts_metrics(participants):
 
 
     fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(14, 6), layout='constrained')
-    axs[0].bar(models, throughputs)
-    axs[1].bar(models, efficiencies)
-    axs[2].bar(models, overshoots)
+    axs[0].bar(MODELS, throughputs)
+    axs[1].bar(MODELS, efficiencies)
+    axs[2].bar(MODELS, overshoots)
 
     axs[0].set_ylabel('Throughput')
     axs[1].set_ylabel('Path Efficiency')
@@ -143,20 +155,19 @@ def plot_fitts_metrics(participants):
     fig.suptitle('Usability Metrics')
     
 
-
 def main():
-    # with open('/Users/cmorrell/Code/adaptive-regression/data/subject-003/ciil/val_fitts.pkl', 'rb') as f:
-    #     ciil_data = pickle.load(f)
+    parser = ArgumentParser(prog='Analyze offline data.')
+    parser.add_argument('-p', '--participants', default=None, help='List of participants to evaluate.')
+    args = parser.parse_args()
+    print(args)
 
-    # predictions = np.linalg.norm(ciil_data['current_direction'], axis=1) / 25
-    # target_positions = np.array(ciil_data['goal_target'])[:, :2]
-    # cursor_positions = np.array(ciil_data['cursor_position'])[:, :2]
-    # distances = np.linalg.norm(target_positions - cursor_positions, axis=1)
+    participants = args.participants
+    if participants is None:
+        regex_filter = libemg.data_handler.RegexFilter('subject-', right_bound='/', values=[str(idx + 1).zfill(3) for idx in range(100)], description='')
+        matching_directories = regex_filter.get_matching_files([path.as_posix() + '/' for path in Path('data').glob('*')])
+        participants = [Path(participant).stem for participant in matching_directories]
 
-    # plt.figure()
-    # plt.scatter(distances, predictions)
-
-    plot_fitts_metrics(['subject-001'])
+    plot_fitts_metrics(participants)
         
     plt.show()
     print('-------------Analyze complete!-------------')
