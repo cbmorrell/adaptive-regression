@@ -124,15 +124,15 @@ class Config:
 
     @property
     def adaptation_model_file(self):
-        return Path(self.data_directory, 'ad_mdl.pkl').absolute().as_posix()
+        return Path(self.data_directory, 'adaptation_mdl.pkl').absolute().as_posix()
 
     @property
     def adaptation_fitts_file(self):
-        return Path(self.sgt_model_file).with_name('ad_fitts.pkl').as_posix()
+        return Path(self.sgt_model_file).with_name('adaptation_fitts.pkl').as_posix()
 
     @property
     def validation_fitts_file(self):
-        return Path(self.sgt_model_file).with_name('val_fitts.pkl').as_posix()
+        return Path(self.sgt_model_file).with_name('validation_fitts.pkl').as_posix()
 
     @property
     def mapping(self):
