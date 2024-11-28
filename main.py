@@ -1,56 +1,52 @@
 import argparse
 
 import libemg
-import numpy as np
-from utils.data_collection import Device
 
 from experiment import Experiment, Config
 
 def main():
     # CLI arguments
-    parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.', usage='python main.py sifi subject-001 within-sgt sgt')
-    parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
-    parser.add_argument('subject_id', type=str, help='Subject ID.')
-    parser.add_argument('--analyze', action='store_true', help='Flag to call analyze_hardware() method.')
-    subparsers = parser.add_subparsers(description='Experiment stage.', dest='stage', required=True)
+    parser = argparse.ArgumentParser(description='Stream EMG data for visualization or collection.')
+    subparsers = parser.add_subparsers(description='Experiment stage.', dest='objective', required=True)
 
-    sgt_parser = subparsers.add_parser('sgt', description='Collect data.')
-    sgt_parser.add_argument('--visualization_method', default='time', type=str, help='Visualization method before collecting data. Options are heatmap, time, or comma-separated channels (e.g., 4,8,10).')
+    config_parser = subparsers.add_parser('config', description='Create configuration file for current condition.')
+    config_parser.add_argument('subject_directory', type=str, help='Directory to store data in. Stem will be taken as subject ID.')
+    config_parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
+    config_parser.add_argument('dominant_hand', type=str, choices=('left', 'right'), help='Dominant hand of participant. Determines direction for Fitts.')
+    config_parser.add_argument('condition_idx', type=int, help='Index of current condition (starts at 0).')
 
-    subparsers.add_parser('adaptation', description='Perform live adaptation.')
-    subparsers.add_parser('validation', description='Perform Fitts task.')
+    run_parser = subparsers.add_parser('run', description='Collect data.')
+    run_parser.add_argument('config_path', type=str, help='Path to configuration file.')
+    run_parser.add_argument('stage', type=str, choices=('sgt', 'adaptation', 'validation'), help='Stage of experiment.')
+    run_parser.add_argument('--analyze', action='store_true', help='Flag to call analyze_hardware() method.')
 
     args = parser.parse_args()
     print(args)
 
-    experiment = Experiment(Config(subject_id=args.subject_id, stage=args.stage, device=Device(args.device)))
+    if args.objective == 'config':
+        config = Config(args.subject_directory, args.dominant_hand, args.device, args.condition_idx)
+        config.save()
+        return
+
+    config = Config.load(args.config_path)
+
+    experiment = Experiment(config, args.stage)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
     for sm_item in experiment.shared_memory_items:
         smm.create_variable(*sm_item)
 
-    online_data_handler, p = experiment.setup_live_processing()
+    online_data_handler, _ = experiment.setup_live_processing()
     if args.analyze:
         online_data_handler.analyze_hardware()
     
     if args.stage == 'sgt':
-        # Visualize
-        method = args.visualization_method
-        if method == 'heatmap':
-            # Assume EMaGer
-            remap_function = lambda x: np.reshape(x, (x.shape[0], 4, 16))
-            online_data_handler.visualize_heatmap(num_samples=experiment.config.device.fs, remap_function=remap_function, feature_list=['MAV', 'RMS'])
-        elif method == 'time':
-            online_data_handler.visualize(num_samples=experiment.config.device.fs, block=True)
-        else:
-            # Passed in list of channels
-            channels = method.replace(' ', '').split(',')
-            channels = list(map(int, channels))
-            online_data_handler.visualize_channels(channels, num_samples=experiment.config.device.fs)
-
+        online_data_handler.visualize(num_samples=experiment.config.device.fs, block=True)
         experiment.start_sgt(online_data_handler)
-
     else:
         experiment.run_isofitts(online_data_handler)
+
+    # TODO: Should we add that context to CIIL where if it's in the target radius it's always 0 in that direction?
+    # TODO: Erik also mentioned maybe prompting the user with the rotational fitts interface instead of the cartesian prompt
 
     print('------------------Main script complete------------------')
 

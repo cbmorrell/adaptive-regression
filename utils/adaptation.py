@@ -1,6 +1,7 @@
 from pathlib import Path
 import random
 import pickle
+import math
 
 import torch
 import numpy as np
@@ -10,12 +11,29 @@ import libemg
 WAITING = 0
 WROTE = 1
 DONE_TASK = -10
+ADAPTATION_TIME = 250   # seconds
+VALIDATION_TIME = 300   # seconds
+TARGET_RADIUS = 40  # pixels
+ISOFITTS_RADIUS = 275   # pixels
 
 
-class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
-    def __init__(self, shared_memory_items, controller: libemg.environments.controllers.Controller, num_circles: int = 30, num_trials: int = 15, dwell_time: float = 3, save_file: str | None = None,
-                  fps: int = 60):
-        super().__init__(controller, num_circles=num_circles, num_trials=num_trials, dwell_time=dwell_time, save_file=save_file, fps=fps)
+class AdaptationFitts(libemg.environments.fitts.ISOFitts):
+    def __init__(self, shared_memory_items, save_file: str, adapt: bool, mapping: str):
+        controller = libemg.environments.controllers.RegressorController()
+        game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
+        config = libemg.environments.fitts.FittsConfig(
+            num_trials=2000,    # set to high number so task stops based on time instead of trials
+            dwell_time=2.0,
+            save_file=save_file,
+            fps=60,
+            width=1500,
+            height=750,
+            target_radius=TARGET_RADIUS,
+            game_time=game_time,
+            mapping=mapping
+        )
+        super().__init__(controller, config, num_targets=8, target_distance_radius=ISOFITTS_RADIUS)
+        self.adapt = adapt
         self.smm = libemg.shared_memory_manager.SharedMemoryManager()
         for sm_item in shared_memory_items:
             self.smm.create_variable(*sm_item)
@@ -24,8 +42,11 @@ class AdaptationIsoFitts(libemg.environments.isofitts.IsoFitts):
         # Write to log_dictionary
         super()._log(label, timestamp)
 
+        if not self.adapt:
+            return
+
         # Want to send the timestamp and the optimal direction
-        optimal_direction = np.array(self.log_dictionary['goal_circle'][-1]) - np.array(self.log_dictionary['cursor_position'][-1])
+        optimal_direction = np.array(self.log_dictionary['goal_target'][-1]) - np.array(self.log_dictionary['cursor_position'][-1])
         optimal_direction[1] *= -1  # multiply by -1 b/c pygame origin is top left, so a lower target has a higher y value
         output = np.array([timestamp, optimal_direction[0], optimal_direction[1]], dtype=np.double)
         self.smm.modify_variable('environment_output', lambda x: np.vstack((output, x))[:x.shape[0]])  # ensure we don't take more than original array size
@@ -152,7 +173,7 @@ def project_prediction(prediction, optimal_direction):
 def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
     # NOTE: These mappings were decided based on piloting
     if method == 'sqrt':
-        result = np.sqrt(np.linalg.norm(optimal_direction / 400))   # normalizing by half of distance between targets
+        result = np.sqrt(np.linalg.norm(optimal_direction / ISOFITTS_RADIUS))   # normalizing by half of distance between targets
     elif method == 'sigmoid':
         result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))
     else:
@@ -173,25 +194,14 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
         adaptation_labels[~positive_mask] = 0.
     else:
         # Wrong quadrant - ignore this
-        return None
+        adaptation_labels = None
 
-    # Normalize to correct magnitude
-    # p = inf b/c (1, 1) should move the same speed as (1, 0)
-    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
-    # print(positive_mask, prediction, adaptation_labels)
-    return adaptation_labels
-
-
-def assign_oracle_label(prediction, optimal_direction):
-    adaptation_labels = project_prediction(prediction, optimal_direction)
-    adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
     return adaptation_labels
 
 
 def make_pseudo_labels(environment_data, smm, approach):
     timestamp = environment_data[0]
     optimal_direction = environment_data[1:]
-    target_radius = 40  # defined in Fitts
 
     # find the features: data - timestamps, <- features ->
     feature_data = smm.get_variable("model_input")
@@ -205,8 +215,7 @@ def make_pseudo_labels(environment_data, smm, approach):
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-
-    if np.linalg.norm(optimal_direction) < (target_radius / 1):
+    if np.linalg.norm(optimal_direction) < TARGET_RADIUS:
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
@@ -216,14 +225,21 @@ def make_pseudo_labels(environment_data, smm, approach):
         # We could probably do something else naive and say that the user is comfortable giving half the radius as a buffer, but that's kind of random.
         
     else:
+        # outcomes = np.array(['P' if np.sign(prediction_component) == np.sign(direction_component) and np.abs(direction_component) > TARGET_RADIUS else 'N'
+        #                      for prediction_component, direction_component in zip(prediction, optimal_direction)])
         outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
         if approach == 'ciil':
             adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)
         elif approach == 'oracle':
-            adaptation_labels = assign_oracle_label(prediction, optimal_direction)
+            adaptation_labels = np.copy(optimal_direction)
         else:
             raise ValueError(f"Unexpected value for approach. Got: {approach}.")
 
+        if adaptation_labels is not None:
+            # Normalize to correct magnitude - p = inf b/c (1, 1) should move the same speed as (1, 0)
+            adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
+
+    # print(outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
