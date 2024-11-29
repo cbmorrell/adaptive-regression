@@ -137,7 +137,7 @@ def plot_fitts_metrics(participants):
         model_efficiencies = []
         model_overshoots = []
         for participant in participants:
-            config = Config.load(Path('data', participant, model, 'config.json'))       
+            config = Config.load(Path('data', participant, model, 'config.json'))
             run_log = read_pickle_file(config.validation_fitts_file)
             fitts_metrics = extract_fitts_metrics(run_log)
             model_throughputs.append(fitts_metrics['throughput'])
@@ -156,8 +156,13 @@ def plot_fitts_metrics(participants):
     axs[0].set_ylabel('Throughput')
     axs[1].set_ylabel('Path Efficiency')
     axs[2].set_ylabel('Overshoots')
-    fig.suptitle('Usability Metrics')
-    fig.savefig(RESULTS_PATH.joinpath('fitts.png'), dpi=DPI)
+    title = 'Usability Metrics'
+    fig.suptitle(title)
+    if len(participants) == 1:
+        # Only analyzing 1 participant - add their ID to title
+        fig.suptitle(f"{title} ({participants[0]})")
+    else:
+        fig.savefig(RESULTS_PATH.joinpath('fitts.png'), dpi=DPI)
     
 
 def main():
@@ -176,7 +181,8 @@ def main():
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     plot_fitts_metrics(participants)
-        
+    
+    # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
     print('-------------Analyze complete!-------------')
 
