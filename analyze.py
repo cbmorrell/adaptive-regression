@@ -21,7 +21,13 @@ def read_pickle_file(filename):
     return file_data
 
 
-def unfinished_trial(run_log, trial_mask):
+def get_config(participant, model):
+    config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
+    assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
+    return Config.load(config_file[0])
+
+
+def is_unfinished_trial(run_log, trial_mask):
     cursor = run_log['cursor_position'][trial_mask[-1]]
     target = run_log['goal_target'][trial_mask[-1]]
     return not in_target(cursor, target)
@@ -96,7 +102,7 @@ def extract_fitts_metrics(run_log):
     trials = np.unique(run_log['trial_number'])
     for t in trials:
         trial_mask = np.where(run_log['trial_number'] == t)[0]
-        if len(trial_mask) <= 1 or unfinished_trial(run_log, trial_mask):
+        if len(trial_mask) <= 1 or is_unfinished_trial(run_log, trial_mask):
             continue
         if is_timeout_trial(run_log, trial_mask):
             # Ignore trial
@@ -137,7 +143,7 @@ def plot_fitts_metrics(participants):
         model_efficiencies = []
         model_overshoots = []
         for participant in participants:
-            config = Config.load(Path('data', participant, model, 'config.json'))
+            config = get_config(participant, model)
             run_log = read_pickle_file(config.validation_fitts_file)
             fitts_metrics = extract_fitts_metrics(run_log)
             model_throughputs.append(fitts_metrics['throughput'])
