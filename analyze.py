@@ -22,6 +22,16 @@ def read_pickle_file(filename):
     return file_data
 
 
+def format_model_names(models):
+    def format_name(name):
+        return name.replace('-', ' ').title().replace('Sgt', 'SGT')
+
+    if isinstance(models, str):
+        return format_name(models)
+
+    return [format_name(model) for model in models]
+
+
 def get_config(participant, model):
     config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
     assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
@@ -156,9 +166,10 @@ def plot_fitts_metrics(participants):
 
 
     fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(14, 6), layout='constrained')
-    axs[0].bar(MODELS, throughputs)
-    axs[1].bar(MODELS, efficiencies)
-    axs[2].bar(MODELS, overshoots)
+    models = format_model_names(MODELS)
+    axs[0].bar(models, throughputs)
+    axs[1].bar(models, efficiencies)
+    axs[2].bar(models, overshoots)
 
     axs[0].set_ylabel('Throughput')
     axs[1].set_ylabel('Path Efficiency')
@@ -173,7 +184,7 @@ def plot_fitts_metrics(participants):
 
 
 def plot_fitts_traces(participants):
-    fig, axs = plt.subplots(nrows=1, ncols=len(MODELS))
+    fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(10, 10))
     cmap = mpl.colormaps['Dark2']
     for model, ax in zip(MODELS, axs):
         for participant_idx, participant in enumerate(participants):
@@ -183,7 +194,9 @@ def plot_fitts_traces(participants):
             for trace in traces:
                 ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx))
             
-        ax.set_title(model)
+        ax.set_title(format_model_names(model))
+        ax.set_xlabel('X (Pixels)')
+        ax.set_ylabel('Y (Pixels)')
     
     title = 'Fitts Traces'
     fig.suptitle(title)
