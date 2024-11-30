@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 import libemg
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from libemg.environments.controllers import RegressorController
 
 from experiment import Config, MODELS
@@ -74,8 +75,8 @@ def extract_traces(run_log):
     trials = np.unique(run_log['trial_number'])
     traces = []
     for t in trials:
-        t_idxs = np.where(run_log['trial_number'] == t)[0]
-        traces.append(np.array(run_log['cursor_position'])[t_idxs][:, :2])
+        trial_mask = np.where(run_log['trial_number'] == t)[0]
+        traces.append(np.array(run_log['cursor_position'])[trial_mask][:, :2])
     return traces
 
 
@@ -168,8 +169,38 @@ def plot_fitts_metrics(participants):
         # Only analyzing 1 participant - add their ID to title
         fig.suptitle(f"{title} ({participants[0]})")
     else:
-        fig.savefig(RESULTS_PATH.joinpath('fitts.png'), dpi=DPI)
+        fig.savefig(RESULTS_PATH.joinpath('fitts-metrics.png'), dpi=DPI)
+
+
+def plot_fitts_traces(participants):
+    fig, axs = plt.subplots(nrows=1, ncols=len(MODELS))
+    cmap = mpl.colormaps['Dark2']
+    for model, ax in zip(MODELS, axs):
+        for participant_idx, participant in enumerate(participants):
+            config = get_config(participant, model)
+            run_log = read_pickle_file(config.validation_fitts_file)
+            traces = extract_traces(run_log)
+            for trace in traces:
+                ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx))
+            
+        ax.set_title(model)
     
+    title = 'Fitts Traces'
+    fig.suptitle(title)
+    if len(participants) == 1:
+        # Only analyzing 1 participant - add their ID to title
+        fig.suptitle(f"{title} ({participants[0]})")
+    else:
+        fig.savefig(RESULTS_PATH.joinpath('fitts-traces.png'), dpi=DPI)
+
+
+def plot_simultaneity(participants):
+    ...
+
+
+def plot_action_interference(participants):
+    ...
+
 
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
@@ -187,6 +218,7 @@ def main():
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     plot_fitts_metrics(participants)
+    plot_fitts_traces(participants)
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
