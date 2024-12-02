@@ -13,6 +13,7 @@ import seaborn as sns
 from experiment import Config, MODELS
 
 
+MODELS = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])    # arrange in order that looks better for plots
 RESULTS_PATH = Path('results')
 DPI = 600
 
@@ -160,8 +161,6 @@ def extract_fitts_metrics(run_log):
         fitts_results['overshoots'].append(calculate_overshoots(run_log, trial_mask))
         fitts_results['efficiency'].append(calculate_efficiency(run_log, trial_mask))
         
-
-    # summary_metrics = dict.fromkeys(fitts_results.keys())
     summary_metrics = {}
     summary_metrics['throughput_over_time'] = fitts_results['throughput']
     summary_metrics['efficiency_over_time'] = fitts_results['efficiency']
@@ -274,7 +273,7 @@ def plot_fitts_traces(participants):
             run_log = read_pickle_file(config.validation_fitts_file)
             traces = extract_traces(run_log)
             for trace in traces:
-                lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant))
+                lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
             
         ax.set_title(format_model_names(model))
         ax.set_xlabel('X (Pixels)')
@@ -366,7 +365,7 @@ def main():
 
     plot_fitts_metrics(participants)
     plot_fitts_metrics(participants, within_dof=True)
-    # plot_fitts_traces(participants)
+    plot_fitts_traces(participants)
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
