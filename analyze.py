@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from libemg.environments.controllers import RegressorController
+import seaborn as sns
 
 from experiment import Config, MODELS
 
@@ -20,6 +21,13 @@ def read_pickle_file(filename):
     with open(filename, 'rb') as f:
         file_data = pickle.load(f)
     return file_data
+
+
+def moving_average(a, window_size = 5):
+    ma = np.cumsum(a)
+    ma[window_size:] = ma[window_size:] - ma[:-window_size]
+    return ma[window_size - 1:] / window_size
+
 
 def get_unique_legend_handles(lines):
     unique_lines = {}
@@ -133,7 +141,12 @@ def extract_fitts_metrics(run_log):
         fitts_results['overshoots'].append(calculate_overshoots(run_log, trial_mask))
         fitts_results['efficiency'].append(calculate_efficiency(run_log, trial_mask))
         
-    summary_metrics = dict.fromkeys(fitts_results.keys())
+
+    # summary_metrics = dict.fromkeys(fitts_results.keys())
+    summary_metrics = {}
+    summary_metrics['throughput_over_time'] = fitts_results['throughput']
+    summary_metrics['efficiency_over_time'] = fitts_results['efficiency']
+    summary_metrics['overshoots_over_time'] = fitts_results['overshoots']
     summary_metrics['timeouts'] = fitts_results['timeouts']
     summary_metrics['overshoots'] = np.sum(fitts_results['overshoots'])
     summary_metrics['efficiency'] = np.mean(fitts_results['efficiency'])
@@ -156,40 +169,70 @@ def plot_pilot_distance_vs_proportional_control():
 
 
 def plot_fitts_metrics(participants):
-    throughputs = []
-    efficiencies = []
-    overshoots = []
-    for model in MODELS:
+    def plot_metric_over_time(values, ax, color):
+        values = moving_average(values)
+        ax.scatter(np.arange(len(values)), values, color=color, s=4)
+        ax.plot(values, alpha=0.5, color=color, linestyle='--')
+
+    fig = plt.figure(layout='constrained', figsize=(16, 10))
+    cmap = mpl.colormaps['Dark2']
+    subfigs = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 3])
+    bar_axs = subfigs[0].subplots(nrows=3, ncols=1, sharex=True)
+    time_axs = subfigs[1].subplots(nrows=3, ncols=len(MODELS), sharex=True)
+    lines = []
+    bar_labels = []
+    mean_throughputs = []
+    mean_efficiencies = []
+    mean_overshoots = []
+    zorder = 2  # zorder=2 so points are plotted on top of bar plot
+    for model_idx, model in enumerate(MODELS):
         model_throughputs = []
         model_efficiencies = []
         model_overshoots = []
-        for participant in participants:
+        bar_labels.append(format_model_names(model))
+        for participant_idx, participant in enumerate(participants):
             config = get_config(participant, model)
             run_log = read_pickle_file(config.validation_fitts_file)
             fitts_metrics = extract_fitts_metrics(run_log)
-            model_throughputs.append(fitts_metrics['throughput'])
+            model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
             model_efficiencies.append(fitts_metrics['efficiency'])
             model_overshoots.append(fitts_metrics['overshoots'])
-        throughputs.append(np.mean(model_throughputs))
-        efficiencies.append(np.mean(model_efficiencies))
-        overshoots.append(np.mean(model_overshoots))
 
+            # Bar plot
+            color = cmap(participant_idx)
+            lines.append(bar_axs[0].scatter(bar_labels[-1], model_throughputs[-1], label=participant, zorder=zorder, color=color))
+            bar_axs[1].scatter(bar_labels[-1], model_efficiencies[-1], zorder=zorder, color=color)
+            bar_axs[2].scatter(bar_labels[-1], model_overshoots[-1], zorder=zorder, color=color)
 
-    fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(14, 6), layout='constrained')
-    models = format_model_names(MODELS)
-    axs[0].bar(models, throughputs)
-    axs[1].bar(models, efficiencies)
-    axs[2].bar(models, overshoots)
+            # Plot over time
+            time_axs[0, model_idx].set_title(bar_labels[-1])
+            time_axs[2, model_idx].set_xlabel('Trial #')
+            plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
+            plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
+            plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
 
-    axs[0].set_ylabel('Throughput')
-    axs[1].set_ylabel('Path Efficiency')
-    axs[2].set_ylabel('Overshoots')
+        mean_throughputs.append(np.mean(model_throughputs))
+        mean_efficiencies.append(np.mean(model_efficiencies))
+        mean_overshoots.append(np.mean(model_overshoots))
+
+    handles = get_unique_legend_handles(lines)
+    bar_color = 'black'
+    bar_axs[0].bar(bar_labels, mean_throughputs, color=bar_color)
+    bar_axs[1].bar(bar_labels, mean_efficiencies, color=bar_color)
+    bar_axs[2].bar(bar_labels, mean_overshoots, color=bar_color)
+    bar_axs[0].set_ylabel('Throughput')
+    bar_axs[1].set_ylabel('Path Efficiency')
+    bar_axs[2].set_ylabel('Overshoots')
+    bar_axs[0].set_title('Across Subjects')
+
     title = 'Usability Metrics'
     fig.suptitle(title)
     if len(participants) == 1:
         # Only analyzing 1 participant - add their ID to title
         fig.suptitle(f"{title} ({participants[0]})")
     else:
+        bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
+        bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
         fig.savefig(RESULTS_PATH.joinpath('fitts-metrics.png'), dpi=DPI)
 
 
@@ -241,6 +284,8 @@ def main():
     args = parser.parse_args()
     print(args)
 
+    sns.set_theme(style='ticks', palette='Dark2')
+
     if args.participants is None:
         regex_filter = libemg.data_handler.RegexFilter('subject-', right_bound='/', values=[str(idx + 1).zfill(3) for idx in range(100)], description='')
         matching_directories = regex_filter.get_matching_files([path.as_posix() + '/' for path in Path('data').glob('*')])
@@ -251,7 +296,7 @@ def main():
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     plot_fitts_metrics(participants)
-    plot_fitts_traces(participants)
+    # plot_fitts_traces(participants)
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
