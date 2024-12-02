@@ -120,6 +120,25 @@ def extract_model_predictions(run_log):
     return predictions
 
 
+def extract_within_dof_trials(run_log):
+    within_dof_trial_mask = []
+    trials = np.unique(run_log['trial_number'])
+    for t in trials:
+        trial_mask = np.where(run_log['trial_number'] == t)[0]
+        initial_cursor_location = np.array(run_log['cursor_position'])[trial_mask][0][:2]
+        target = np.array(run_log['goal_target'])[trial_mask][0]
+        target_location = target[:2]
+        target_width = target[2]
+        if np.any(np.abs(target_location - initial_cursor_location) <= target_width // 2):
+            within_dof_trial_mask.extend(trial_mask)
+
+    # Return run_log just with correct trials
+    for key in run_log.keys():
+        run_log[key] = np.array(run_log[key])[within_dof_trial_mask]
+
+    return run_log
+
+
 def extract_fitts_metrics(run_log):
     fitts_results = {
         'timeouts': [],
@@ -168,7 +187,7 @@ def plot_pilot_distance_vs_proportional_control():
     plt.scatter(distances, predictions)
 
 
-def plot_fitts_metrics(participants):
+def plot_fitts_metrics(participants, within_dof = False):
     def plot_metric_over_time(values, ax, color):
         values = moving_average(values)
         ax.scatter(np.arange(len(values)), values, color=color, s=4)
@@ -193,6 +212,8 @@ def plot_fitts_metrics(participants):
         for participant_idx, participant in enumerate(participants):
             config = get_config(participant, model)
             run_log = read_pickle_file(config.validation_fitts_file)
+            if within_dof:
+                run_log = extract_within_dof_trials(run_log)
             fitts_metrics = extract_fitts_metrics(run_log)
             model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
             model_efficiencies.append(fitts_metrics['efficiency'])
@@ -206,6 +227,9 @@ def plot_fitts_metrics(participants):
 
             # Plot over time
             time_axs[0, model_idx].set_title(bar_labels[-1])
+            time_axs[0, model_idx].set_ylim((0, 1.2))
+            time_axs[1, model_idx].set_ylim((0, 1.2))
+            time_axs[2, model_idx].set_ylim((0, 4.0))
             time_axs[2, model_idx].set_xlabel('Trial #')
             plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
             plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
@@ -225,7 +249,11 @@ def plot_fitts_metrics(participants):
     bar_axs[2].set_ylabel('Overshoots')
     bar_axs[0].set_title('Across Subjects')
 
+    filename = 'fitts-metrics'
     title = 'Usability Metrics'
+    if within_dof:
+        title += ' (Within-DoF)'
+        filename += '-within-dof'
     fig.suptitle(title)
     if len(participants) == 1:
         # Only analyzing 1 participant - add their ID to title
@@ -233,7 +261,7 @@ def plot_fitts_metrics(participants):
     else:
         bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
         bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
-        fig.savefig(RESULTS_PATH.joinpath('fitts-metrics.png'), dpi=DPI)
+        fig.savefig(RESULTS_PATH.joinpath(f"{filename}.png"), dpi=DPI)
 
 
 def plot_fitts_traces(participants):
@@ -264,6 +292,7 @@ def plot_fitts_traces(participants):
 
 
 def plot_dof_activation_heatmap(subject_info):
+    raise NotImplementedError('This has not been converted to current code yet.')
     # Create heatmap where x is DOF 1 and y is DOF2
     subjects = np.array([subject[0] for subject in subject_info])
     models = np.array([subject[1] for subject in subject_info])
@@ -336,6 +365,7 @@ def main():
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
     plot_fitts_metrics(participants)
+    plot_fitts_metrics(participants, within_dof=True)
     # plot_fitts_traces(participants)
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
