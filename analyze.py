@@ -21,10 +21,20 @@ def read_pickle_file(filename):
         file_data = pickle.load(f)
     return file_data
 
+def get_unique_legend_handles(lines):
+    unique_lines = {}
+    for line in lines:
+        label = line.get_label()
+        if label not in unique_lines.keys():
+            unique_lines[label] = line
+
+    unique_lines = {label: unique_lines[label] for label in sorted(unique_lines.keys())}
+    return unique_lines
+
 
 def format_model_names(models):
     def format_name(name):
-        return name.replace('-', ' ').title().replace('Sgt', 'SGT')
+        return name.replace('-', ' ').title().replace('Sgt', 'SGT').replace('Ciil', 'CIIL')
 
     if isinstance(models, str):
         return format_name(models)
@@ -184,27 +194,37 @@ def plot_fitts_metrics(participants):
 
 
 def plot_fitts_traces(participants):
-    fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(10, 10))
+    fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
     cmap = mpl.colormaps['Dark2']
+    lines = []
     for model, ax in zip(MODELS, axs):
         for participant_idx, participant in enumerate(participants):
             config = get_config(participant, model)
             run_log = read_pickle_file(config.validation_fitts_file)
             traces = extract_traces(run_log)
             for trace in traces:
-                ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx))
+                lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant))
             
         ax.set_title(format_model_names(model))
         ax.set_xlabel('X (Pixels)')
-        ax.set_ylabel('Y (Pixels)')
     
+    axs[0].set_ylabel('Y (Pixels)')
     title = 'Fitts Traces'
     fig.suptitle(title)
     if len(participants) == 1:
         # Only analyzing 1 participant - add their ID to title
         fig.suptitle(f"{title} ({participants[0]})")
     else:
+        legend_handles = get_unique_legend_handles(lines)
+        axs[-1].legend(legend_handles.values(), legend_handles.keys())
         fig.savefig(RESULTS_PATH.joinpath('fitts-traces.png'), dpi=DPI)
+
+
+def plot_throughput_over_time(participants):
+    # fig, axs = plt.subp
+    # for model, ax in zip(MODELS, axs):
+    #     for participant_idx, participant in enumerate(participants):
+    ...
 
 
 def plot_simultaneity(participants):
