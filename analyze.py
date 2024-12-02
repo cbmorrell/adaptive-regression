@@ -192,7 +192,7 @@ def plot_fitts_metrics(participants, within_dof = False):
         ax.scatter(np.arange(len(values)), values, color=color, s=4)
         ax.plot(values, alpha=0.5, color=color, linestyle='--')
 
-    fig = plt.figure(layout='constrained', figsize=(16, 10))
+    fig = plt.figure(layout='constrained', figsize=(18, 6))
     cmap = mpl.colormaps['Dark2']
     subfigs = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 3])
     bar_axs = subfigs[0].subplots(nrows=3, ncols=1, sharex=True)
@@ -228,7 +228,7 @@ def plot_fitts_metrics(participants, within_dof = False):
             time_axs[0, model_idx].set_title(bar_labels[-1])
             time_axs[0, model_idx].set_ylim((0, 1.2))
             time_axs[1, model_idx].set_ylim((0, 1.2))
-            time_axs[2, model_idx].set_ylim((0, 4.0))
+            time_axs[2, model_idx].set_ylim((0, 10.0))
             time_axs[2, model_idx].set_xlabel('Trial #')
             plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
             plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
@@ -258,8 +258,9 @@ def plot_fitts_metrics(participants, within_dof = False):
         # Only analyzing 1 participant - add their ID to title
         fig.suptitle(f"{title} ({participants[0]})")
     else:
-        bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
-        bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
+        # bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
+        # bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
+        fig.legend(handles.values(), handles.keys(), loc='upper left', ncols=4)
         fig.savefig(RESULTS_PATH.joinpath(f"{filename}.png"), dpi=DPI)
 
 
