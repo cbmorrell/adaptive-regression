@@ -15,17 +15,26 @@ from experiment import Config, MODELS
 
 
 MODELS = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])    # arrange in order that looks better for plots
-RESULTS_PATH = Path('results')
 DPI = 600
 
 
-class LogReader:
-    def __init__(self, exclude_timeout_trials = False, exclude_within_dof_trials = False, exclude_combined_dof_trials = False):
-        self.exclude_timeout_trials = exclude_timeout_trials
-        self.exclude_within_dof_trials = exclude_within_dof_trials
-        self.exclude_combined_dof_trials = exclude_combined_dof_trials
+class Plotter:
+    def __init__(self, participants, analysis):
+        self.participants = participants
+        self.analysis = analysis
 
-    def read(self, participant, model):
+        if self.analysis == 'within':
+            self.exclude_within_dof_trials = False
+            self.exclude_combined_dof_trials = True
+        elif self.analysis == 'combined':
+            self.exclude_within_dof_trials = True
+            self.exclude_combined_dof_trials = False
+        else:
+            self.exclude_within_dof_trials = False
+            self.exclude_combined_dof_trials = False
+        self.exclude_timeout_trials = False
+
+    def read_log(self, participant, model):
         config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
         assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
         config = Config.load(config_file[0])
@@ -52,6 +61,165 @@ class LogReader:
             run_log[key] = np.array(run_log[key])[filter_mask]
 
         return run_log
+    
+    def _plot_fitts_metrics(self):
+        def plot_metric_over_time(values, ax, color):
+            values = moving_average(values)
+            ax.scatter(np.arange(len(values)), values, color=color, s=4)
+            ax.plot(values, alpha=0.5, color=color, linestyle='--')
+
+        fig = plt.figure(layout='constrained', figsize=(18, 6))
+        cmap = mpl.colormaps['Dark2']
+        subfigs = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 3])
+        bar_axs = subfigs[0].subplots(nrows=3, ncols=1, sharex=True)
+        time_axs = subfigs[1].subplots(nrows=3, ncols=len(MODELS), sharex=True)
+        lines = []
+        bar_labels = []
+        mean_throughputs = []
+        mean_efficiencies = []
+        mean_overshoots = []
+        zorder = 2  # zorder=2 so points are plotted on top of bar plot
+        for model_idx, model in enumerate(MODELS):
+            model_throughputs = []
+            model_efficiencies = []
+            model_overshoots = []
+            bar_labels.append(format_model_names(model))
+            for participant_idx, participant in enumerate(self.participants):
+                run_log = self.read_log(participant, model)
+                fitts_metrics = extract_fitts_metrics(run_log)
+                model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
+                model_efficiencies.append(fitts_metrics['efficiency'])
+                model_overshoots.append(fitts_metrics['overshoots'])
+
+                # Bar plot
+                color = cmap(participant_idx)
+                lines.append(bar_axs[0].scatter(bar_labels[-1], model_throughputs[-1], label=participant, zorder=zorder, color=color))
+                bar_axs[1].scatter(bar_labels[-1], model_efficiencies[-1], zorder=zorder, color=color)
+                bar_axs[2].scatter(bar_labels[-1], model_overshoots[-1], zorder=zorder, color=color)
+
+                # Time series plots in a row share y-axis
+                time_axs[0, model_idx].sharey(time_axs[0, 0])
+                time_axs[1, model_idx].sharey(time_axs[1, 0])
+                time_axs[2, model_idx].sharey(time_axs[2, 0])
+
+                # Plot over time
+                time_axs[0, model_idx].set_title(bar_labels[-1])
+                time_axs[2, model_idx].set_xlabel('Trial #')
+                plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
+                plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
+                plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
+
+
+            mean_throughputs.append(np.mean(model_throughputs))
+            mean_efficiencies.append(np.mean(model_efficiencies))
+            mean_overshoots.append(np.mean(model_overshoots))
+
+        handles = get_unique_legend_handles(lines)
+        bar_color = 'black'
+        bar_axs[0].bar(bar_labels, mean_throughputs, color=bar_color)
+        bar_axs[1].bar(bar_labels, mean_efficiencies, color=bar_color)
+        bar_axs[2].bar(bar_labels, mean_overshoots, color=bar_color)
+        bar_axs[0].set_ylabel('Throughput')
+        bar_axs[1].set_ylabel('Path Efficiency')
+        bar_axs[2].set_ylabel('Overshoots')
+        bar_axs[0].set_title('Across Subjects')
+
+        if len(self.participants) != 1:
+            # bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
+            # bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
+            fig.legend(handles.values(), handles.keys(), loc='upper left', ncols=4)
+
+        return fig
+
+    def _plot_fitts_traces(self):
+        fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
+        cmap = mpl.colormaps['Dark2']
+        lines = []
+        for model, ax in zip(MODELS, axs):
+            for participant_idx, participant in enumerate(self.participants):
+                run_log = self.read_log(participant, model)
+                traces = extract_traces(run_log)
+                for trace in traces:
+                    lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
+                
+            ax.set_title(format_model_names(model))
+            ax.set_xlabel('X (Pixels)')
+        
+        axs[0].set_ylabel('Y (Pixels)')
+        if len(self.participants) != 1:
+            legend_handles = get_unique_legend_handles(lines)
+            axs[-1].legend(legend_handles.values(), legend_handles.keys())
+
+        return fig
+
+    def _plot_dof_activation_heatmap(self):
+        # Create heatmap where x is DOF 1 and y is DOF2
+        fig = plt.figure(figsize=(16, 4), constrained_layout=True)
+        outer_grid = fig.add_gridspec(nrows=1, ncols=len(MODELS))
+        width_ratios = [2, 1]
+        height_ratios = [1, 2]
+        # num_bins = 40
+        num_bins = 10
+        for model_idx, model in enumerate(MODELS):
+            model_predictions = []
+            for participant in self.participants:
+                run_log = self.read_log(participant, model)
+                predictions = extract_model_predictions(run_log)
+                predictions = np.concatenate(predictions)
+                model_predictions.append(predictions)
+            model_predictions = np.concatenate(model_predictions)
+
+            # Format heatmap + histogram axes
+            inner_grid = outer_grid[model_idx].subgridspec(nrows=2, ncols=2, width_ratios=width_ratios, height_ratios=height_ratios)
+            axs = inner_grid.subplots()
+            heatmap_ax = axs[1, 0]
+            x_hist_ax = axs[0, 0]
+            y_hist_ax = axs[1, 1]
+            axs[0, 1].set_axis_off()    # hide unused axis
+
+            # Plot
+            value_range = np.array([[-1, 1], [-1, 1]])
+            x_predictions = model_predictions[:, 0]
+            y_predictions = model_predictions[:, 1]
+            _, _, _, heatmap = heatmap_ax.hist2d(x_predictions, y_predictions, bins=num_bins, range=value_range)
+            x_counts, _, _ = x_hist_ax.hist(x_predictions, bins=num_bins, range=value_range[0])
+            y_counts, _, _ = y_hist_ax.hist(y_predictions, bins=num_bins, range=value_range[0], orientation='horizontal')
+            x_hist_ax.yaxis.set_major_formatter(PercentFormatter(xmax=sum(x_counts), decimals=0))
+            y_hist_ax.xaxis.set_major_formatter(PercentFormatter(xmax=sum(y_counts), decimals=0))
+
+            # Formatting
+            fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
+            x_hist_ax.set_title(format_model_names(model))
+            heatmap_ax.set_xlabel('DoF Activation (Open / Close)')
+            if model == MODELS[0]:
+                heatmap_ax.set_ylabel('DoF Activation (Pro / Supination)')
+        
+        return fig
+
+    def plot(self, plot_type):
+        if plot_type == 'fitts-metrics':
+            fig = self._plot_fitts_metrics()
+        elif plot_type == 'fitts-traces':
+            fig = self._plot_fitts_traces()
+        elif plot_type == 'heatmap':
+            fig = self._plot_dof_activation_heatmap()
+        else:
+            raise ValueError(f"Unexpected value for plot_type. Got: {plot_type}.")
+
+        filename = plot_type
+        filename += f"-{self.analysis}-trials"
+        if len(self.participants) == 1:
+            filename += f"-{self.participants[0]}"
+        filename += '.png'
+
+        results_path = Path('results')
+        results_path.mkdir(parents=True, exist_ok=True)
+        filepath = Path(results_path, filename)
+        title = filepath.stem.replace('-', ' ').title()
+        fig.suptitle(title)
+        fig.savefig(filepath, dpi=DPI)
+        print(f"File saved to {filepath.as_posix()}.")
+
 
 def read_pickle_file(filename):
     with open(filename, 'rb') as f:
@@ -207,159 +375,10 @@ def plot_pilot_distance_vs_proportional_control():
     plt.scatter(distances, predictions)
 
 
-def plot_fitts_metrics(participants, reader):
-    def plot_metric_over_time(values, ax, color):
-        values = moving_average(values)
-        ax.scatter(np.arange(len(values)), values, color=color, s=4)
-        ax.plot(values, alpha=0.5, color=color, linestyle='--')
-
-    fig = plt.figure(layout='constrained', figsize=(18, 6))
-    cmap = mpl.colormaps['Dark2']
-    subfigs = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 3])
-    bar_axs = subfigs[0].subplots(nrows=3, ncols=1, sharex=True)
-    time_axs = subfigs[1].subplots(nrows=3, ncols=len(MODELS), sharex=True)
-    lines = []
-    bar_labels = []
-    mean_throughputs = []
-    mean_efficiencies = []
-    mean_overshoots = []
-    zorder = 2  # zorder=2 so points are plotted on top of bar plot
-    for model_idx, model in enumerate(MODELS):
-        model_throughputs = []
-        model_efficiencies = []
-        model_overshoots = []
-        bar_labels.append(format_model_names(model))
-        for participant_idx, participant in enumerate(participants):
-            run_log = reader.read(participant, model)
-            fitts_metrics = extract_fitts_metrics(run_log)
-            model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
-            model_efficiencies.append(fitts_metrics['efficiency'])
-            model_overshoots.append(fitts_metrics['overshoots'])
-
-            # Bar plot
-            color = cmap(participant_idx)
-            lines.append(bar_axs[0].scatter(bar_labels[-1], model_throughputs[-1], label=participant, zorder=zorder, color=color))
-            bar_axs[1].scatter(bar_labels[-1], model_efficiencies[-1], zorder=zorder, color=color)
-            bar_axs[2].scatter(bar_labels[-1], model_overshoots[-1], zorder=zorder, color=color)
-
-            # Time series plots in a row share y-axis
-            time_axs[0, model_idx].sharey(time_axs[0, 0])
-            time_axs[1, model_idx].sharey(time_axs[1, 0])
-            time_axs[2, model_idx].sharey(time_axs[2, 0])
-
-            # Plot over time
-            time_axs[0, model_idx].set_title(bar_labels[-1])
-            time_axs[2, model_idx].set_xlabel('Trial #')
-            plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
-            plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
-            plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
-
-
-        mean_throughputs.append(np.mean(model_throughputs))
-        mean_efficiencies.append(np.mean(model_efficiencies))
-        mean_overshoots.append(np.mean(model_overshoots))
-
-    handles = get_unique_legend_handles(lines)
-    bar_color = 'black'
-    bar_axs[0].bar(bar_labels, mean_throughputs, color=bar_color)
-    bar_axs[1].bar(bar_labels, mean_efficiencies, color=bar_color)
-    bar_axs[2].bar(bar_labels, mean_overshoots, color=bar_color)
-    bar_axs[0].set_ylabel('Throughput')
-    bar_axs[1].set_ylabel('Path Efficiency')
-    bar_axs[2].set_ylabel('Overshoots')
-    bar_axs[0].set_title('Across Subjects')
-
-    filename = 'fitts-metrics'
-    title = 'Usability Metrics'
-    if reader.exclude_combined_dof_trials:
-        title += ' (Within-DoF)'
-        filename += '-within-dof'
-    fig.suptitle(title)
-    if len(participants) == 1:
-        # Only analyzing 1 participant - add their ID to title
-        fig.suptitle(f"{title} ({participants[0]})")
-    else:
-        # bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
-        # bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
-        fig.legend(handles.values(), handles.keys(), loc='upper left', ncols=4)
-        fig.savefig(RESULTS_PATH.joinpath(f"{filename}.png"), dpi=DPI)
-
-
-def plot_fitts_traces(participants, reader):
-    fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
-    cmap = mpl.colormaps['Dark2']
-    lines = []
-    for model, ax in zip(MODELS, axs):
-        for participant_idx, participant in enumerate(participants):
-            run_log = reader.read(participant, model)
-            traces = extract_traces(run_log)
-            for trace in traces:
-                lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
-            
-        ax.set_title(format_model_names(model))
-        ax.set_xlabel('X (Pixels)')
-    
-    axs[0].set_ylabel('Y (Pixels)')
-    title = 'Fitts Traces'
-    fig.suptitle(title)
-    if len(participants) == 1:
-        # Only analyzing 1 participant - add their ID to title
-        fig.suptitle(f"{title} ({participants[0]})")
-    else:
-        legend_handles = get_unique_legend_handles(lines)
-        axs[-1].legend(legend_handles.values(), legend_handles.keys())
-        fig.savefig(RESULTS_PATH.joinpath('fitts-traces.png'), dpi=DPI)
-
-
-def plot_dof_activation_heatmap(participants, reader):
-    # Create heatmap where x is DOF 1 and y is DOF2
-    fig = plt.figure(figsize=(16, 4), constrained_layout=True)
-    outer_grid = fig.add_gridspec(nrows=1, ncols=len(MODELS))
-    width_ratios = [2, 1]
-    height_ratios = [1, 2]
-    # num_bins = 40
-    num_bins = 10
-    for model_idx, model in enumerate(MODELS):
-        model_predictions = []
-        for participant in participants:
-            run_log = reader.read(participant, model)
-            predictions = extract_model_predictions(run_log)
-            predictions = np.concatenate(predictions)
-            model_predictions.append(predictions)
-        model_predictions = np.concatenate(model_predictions)
-
-        # Format heatmap + histogram axes
-        inner_grid = outer_grid[model_idx].subgridspec(nrows=2, ncols=2, width_ratios=width_ratios, height_ratios=height_ratios)
-        axs = inner_grid.subplots()
-        heatmap_ax = axs[1, 0]
-        x_hist_ax = axs[0, 0]
-        y_hist_ax = axs[1, 1]
-        axs[0, 1].set_axis_off()    # hide unused axis
-
-        # Plot
-        value_range = np.array([[-1, 1], [-1, 1]])
-        x_predictions = model_predictions[:, 0]
-        y_predictions = model_predictions[:, 1]
-        _, _, _, heatmap = heatmap_ax.hist2d(x_predictions, y_predictions, bins=num_bins, range=value_range)
-        x_counts, _, _ = x_hist_ax.hist(x_predictions, bins=num_bins, range=value_range[0])
-        y_counts, _, _ = y_hist_ax.hist(y_predictions, bins=num_bins, range=value_range[0], orientation='horizontal')
-        x_hist_ax.yaxis.set_major_formatter(PercentFormatter(xmax=sum(x_counts), decimals=0))
-        y_hist_ax.xaxis.set_major_formatter(PercentFormatter(xmax=sum(y_counts), decimals=0))
-
-        # Formatting
-        fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
-        x_hist_ax.set_title(format_model_names(model))
-        heatmap_ax.set_xlabel('DoF Activation (Open / Close)')
-        if model == MODELS[0]:
-            heatmap_ax.set_ylabel('DoF Activation (Pro / Supination)')
-    
-    fig.suptitle('DOF Activation Heatmap')
-    fig.savefig(RESULTS_PATH.joinpath('fitts-heatmap.png'), dpi=DPI)
-
-
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default=None, help='List of participants to evaluate.')
+    parser.add_argument('-a', '--analysis', default='all', choices=('all', 'combined', 'within'), help='Subset of data to perform analysis on.')
     args = parser.parse_args()
     print(args)
 
@@ -373,16 +392,10 @@ def main():
     else:
         participants = str(args.participants).replace(' ', '').split(',')
 
-    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
-
-    reader = LogReader()
-    within_dof_reader = LogReader(exclude_combined_dof_trials=True)
-    combined_dof_reader = LogReader(exclude_within_dof_trials=True)
-
-    plot_fitts_metrics(participants, reader)
-    plot_fitts_metrics(participants, within_dof_reader)
-    plot_fitts_traces(participants, reader)
-    plot_dof_activation_heatmap(participants, reader)
+    plotter = Plotter(participants, args.analysis)
+    plotter.plot('fitts-metrics')
+    plotter.plot('fitts-traces')
+    plotter.plot('heatmap')
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
