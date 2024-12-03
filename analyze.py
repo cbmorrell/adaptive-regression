@@ -34,6 +34,9 @@ class Plotter:
             self.exclude_combined_dof_trials = False
         self.exclude_timeout_trials = False
 
+        self.results_path = Path('results', self.analysis)
+        self.results_path.mkdir(parents=True, exist_ok=True)
+
     def read_log(self, participant, model):
         config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
         assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
@@ -206,17 +209,15 @@ class Plotter:
         else:
             raise ValueError(f"Unexpected value for plot_type. Got: {plot_type}.")
 
+        title = f"{plot_type} {self.analysis} Trials".replace('-', ' ').title()
+        fig.suptitle(title)
+
         filename = plot_type
-        filename += f"-{self.analysis}-trials"
         if len(self.participants) == 1:
             filename += f"-{self.participants[0]}"
+            title += f"({self.participants[0]})"
         filename += '.png'
-
-        results_path = Path('results')
-        results_path.mkdir(parents=True, exist_ok=True)
-        filepath = Path(results_path, filename)
-        title = filepath.stem.replace('-', ' ').title()
-        fig.suptitle(title)
+        filepath = Path(self.results_path, filename)
         fig.savefig(filepath, dpi=DPI)
         print(f"File saved to {filepath.as_posix()}.")
 
