@@ -242,6 +242,11 @@ def plot_fitts_metrics(participants, reader):
             bar_axs[1].scatter(bar_labels[-1], model_efficiencies[-1], zorder=zorder, color=color)
             bar_axs[2].scatter(bar_labels[-1], model_overshoots[-1], zorder=zorder, color=color)
 
+            # Time series plots in a row share y-axis
+            time_axs[0, model_idx].sharey(time_axs[0, 0])
+            time_axs[1, model_idx].sharey(time_axs[1, 0])
+            time_axs[2, model_idx].sharey(time_axs[2, 0])
+
             # Plot over time
             time_axs[0, model_idx].set_title(bar_labels[-1])
             time_axs[2, model_idx].set_xlabel('Trial #')
@@ -249,10 +254,6 @@ def plot_fitts_metrics(participants, reader):
             plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
             plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
 
-            # Time series plots in a row share y-axis
-            time_axs[0, model_idx].sharey(time_axs[0, 0])
-            time_axs[1, model_idx].sharey(time_axs[1, 0])
-            time_axs[2, model_idx].sharey(time_axs[2, 0])
 
         mean_throughputs.append(np.mean(model_throughputs))
         mean_efficiencies.append(np.mean(model_efficiencies))
