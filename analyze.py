@@ -19,6 +19,40 @@ RESULTS_PATH = Path('results')
 DPI = 600
 
 
+class LogReader:
+    def __init__(self, exclude_timeout_trials = False, exclude_within_dof_trials = False, exclude_combined_dof_trials = False):
+        self.exclude_timeout_trials = exclude_timeout_trials
+        self.exclude_within_dof_trials = exclude_within_dof_trials
+        self.exclude_combined_dof_trials = exclude_combined_dof_trials
+
+    def read(self, participant, model):
+        config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
+        assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
+        config = Config.load(config_file[0])
+        run_log = read_pickle_file(config.validation_fitts_file)
+
+        filter_mask = []
+        for t in np.unique(run_log['trial_number']):
+            trial_mask = np.where(run_log['trial_number'] == t)[0]
+            is_timeout_trial, is_unfinished_trial, is_within_dof_trial = get_trial_flags(run_log, trial_mask)
+            if participant == 'subject-002' and model == 'within-sgt' and t == 0:
+                # Handling edge case for first trial being a timeout
+                is_unfinished_trial = False
+                is_timeout_trial = True
+
+            if (is_timeout_trial and self.exclude_timeout_trials) or (is_within_dof_trial and self.exclude_within_dof_trials) or (not is_within_dof_trial 
+                and self.exclude_combined_dof_trials) or is_unfinished_trial:
+                print(f"Skipping {participant} {model} trial {t}.")
+                continue
+
+            filter_mask.extend(trial_mask)
+            
+        # Return run_log just with correct trials
+        for key in run_log.keys():
+            run_log[key] = np.array(run_log[key])[filter_mask]
+
+        return run_log
+
 def read_pickle_file(filename):
     with open(filename, 'rb') as f:
         file_data = pickle.load(f)
@@ -50,34 +84,6 @@ def format_model_names(models):
         return format_name(models)
 
     return [format_name(model) for model in models]
-
-
-def load_run_log(participant, model, exclude_timeout_trials = False, exclude_within_dof_trials = False, exclude_combined_dof_trials = False):
-    config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
-    assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
-    config = Config.load(config_file[0])
-    run_log = read_pickle_file(config.validation_fitts_file)
-
-    filter_mask = []
-    for t in np.unique(run_log['trial_number']):
-        trial_mask = np.where(run_log['trial_number'] == t)[0]
-        is_timeout_trial, is_unfinished_trial, is_within_dof_trial = get_trial_flags(run_log, trial_mask)
-        if participant == 'subject-002' and model == 'within-sgt' and t == 0:
-            # Handling edge case for first trial being a timeout
-            is_unfinished_trial = False
-            is_timeout_trial = True
-
-        if (is_timeout_trial and exclude_timeout_trials) or (is_within_dof_trial and exclude_within_dof_trials) or (not is_within_dof_trial and exclude_combined_dof_trials) or is_unfinished_trial:
-            print(f"Skipping {participant} {model} trial {t}.")
-            continue
-
-        filter_mask.extend(trial_mask)
-        
-    # Return run_log just with correct trials
-    for key in run_log.keys():
-        run_log[key] = np.array(run_log[key])[filter_mask]
-
-    return run_log
 
 
 def get_trial_flags(run_log, trial_mask):
@@ -201,7 +207,7 @@ def plot_pilot_distance_vs_proportional_control():
     plt.scatter(distances, predictions)
 
 
-def plot_fitts_metrics(participants, within_dof = False):
+def plot_fitts_metrics(participants, reader):
     def plot_metric_over_time(values, ax, color):
         values = moving_average(values)
         ax.scatter(np.arange(len(values)), values, color=color, s=4)
@@ -224,7 +230,7 @@ def plot_fitts_metrics(participants, within_dof = False):
         model_overshoots = []
         bar_labels.append(format_model_names(model))
         for participant_idx, participant in enumerate(participants):
-            run_log = load_run_log(participant, model, exclude_combined_dof_trials=within_dof)
+            run_log = reader.read(participant, model)
             fitts_metrics = extract_fitts_metrics(run_log)
             model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
             model_efficiencies.append(fitts_metrics['efficiency'])
@@ -264,7 +270,7 @@ def plot_fitts_metrics(participants, within_dof = False):
 
     filename = 'fitts-metrics'
     title = 'Usability Metrics'
-    if within_dof:
+    if reader.exclude_combined_dof_trials:
         title += ' (Within-DoF)'
         filename += '-within-dof'
     fig.suptitle(title)
@@ -278,13 +284,13 @@ def plot_fitts_metrics(participants, within_dof = False):
         fig.savefig(RESULTS_PATH.joinpath(f"{filename}.png"), dpi=DPI)
 
 
-def plot_fitts_traces(participants):
+def plot_fitts_traces(participants, reader):
     fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
     cmap = mpl.colormaps['Dark2']
     lines = []
     for model, ax in zip(MODELS, axs):
         for participant_idx, participant in enumerate(participants):
-            run_log = load_run_log(participant, model)
+            run_log = reader.read(participant, model)
             traces = extract_traces(run_log)
             for trace in traces:
                 lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
@@ -304,7 +310,7 @@ def plot_fitts_traces(participants):
         fig.savefig(RESULTS_PATH.joinpath('fitts-traces.png'), dpi=DPI)
 
 
-def plot_dof_activation_heatmap(participants):
+def plot_dof_activation_heatmap(participants, reader):
     # Create heatmap where x is DOF 1 and y is DOF2
     fig = plt.figure(figsize=(16, 4), constrained_layout=True)
     outer_grid = fig.add_gridspec(nrows=1, ncols=len(MODELS))
@@ -315,7 +321,7 @@ def plot_dof_activation_heatmap(participants):
     for model_idx, model in enumerate(MODELS):
         model_predictions = []
         for participant in participants:
-            run_log = load_run_log(participant, model)
+            run_log = reader.read(participant, model)
             predictions = extract_model_predictions(run_log)
             predictions = np.concatenate(predictions)
             model_predictions.append(predictions)
@@ -368,10 +374,14 @@ def main():
 
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
 
-    plot_fitts_metrics(participants)
-    plot_fitts_metrics(participants, within_dof=True)
-    plot_fitts_traces(participants)
-    plot_dof_activation_heatmap(participants)
+    reader = LogReader()
+    within_dof_reader = LogReader(exclude_combined_dof_trials=True)
+    combined_dof_reader = LogReader(exclude_within_dof_trials=True)
+
+    plot_fitts_metrics(participants, reader)
+    plot_fitts_metrics(participants, within_dof_reader)
+    plot_fitts_traces(participants, reader)
+    plot_dof_activation_heatmap(participants, reader)
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
