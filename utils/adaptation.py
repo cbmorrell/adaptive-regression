@@ -15,6 +15,7 @@ ADAPTATION_TIME = 250   # seconds
 VALIDATION_TIME = 300   # seconds
 TARGET_RADIUS = 40  # pixels
 ISOFITTS_RADIUS = 275   # pixels
+TIMEOUT = 30
 
 
 class AdaptationFitts(libemg.environments.fitts.ISOFitts):
@@ -30,7 +31,8 @@ class AdaptationFitts(libemg.environments.fitts.ISOFitts):
             height=750,
             target_radius=TARGET_RADIUS,
             game_time=game_time,
-            mapping=mapping
+            mapping=mapping,
+            timeout=TIMEOUT
         )
         super().__init__(controller, config, num_targets=8, target_distance_radius=ISOFITTS_RADIUS)
         self.adapt = adapt
