@@ -25,7 +25,7 @@ def read_pickle_file(filename):
     return file_data
 
 
-def moving_average(a, window_size = 5):
+def moving_average(a, window_size = 3):
     ma = np.cumsum(a)
     ma[window_size:] = ma[window_size:] - ma[:-window_size]
     return ma[window_size - 1:] / window_size
@@ -52,20 +52,45 @@ def format_model_names(models):
     return [format_name(model) for model in models]
 
 
-def load_config(participant, model):
+def load_run_log(participant, model, exclude_timeout_trials = False, exclude_within_dof_trials = False, exclude_combined_dof_trials = False):
     config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
     assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
-    return Config.load(config_file[0])
+    config = Config.load(config_file[0])
+    run_log = read_pickle_file(config.validation_fitts_file)
+
+    filter_mask = []
+    for t in np.unique(run_log['trial_number']):
+        trial_mask = np.where(run_log['trial_number'] == t)[0]
+        is_timeout_trial, is_unfinished_trial, is_within_dof_trial = get_trial_flags(run_log, trial_mask)
+        if participant == 'subject-002' and model == 'within-sgt' and t == 0:
+            # Handling edge case for first trial being a timeout
+            is_unfinished_trial = False
+            is_timeout_trial = True
+
+        if (is_timeout_trial and exclude_timeout_trials) or (is_within_dof_trial and exclude_within_dof_trials) or (not is_within_dof_trial and exclude_combined_dof_trials) or is_unfinished_trial:
+            print(f"Skipping {participant} {model} trial {t}.")
+            continue
+
+        filter_mask.extend(trial_mask)
+        
+    # Return run_log just with correct trials
+    for key in run_log.keys():
+        run_log[key] = np.array(run_log[key])[filter_mask]
+
+    return run_log
+
 
 def get_trial_flags(run_log, trial_mask):
-    cursor = run_log['cursor_position'][trial_mask[-1]]
+    initial_cursor_location = run_log['cursor_position'][trial_mask[0]][:2]
+    final_cursor = run_log['cursor_position'][trial_mask[-1]]
     target = run_log['goal_target'][trial_mask[-1]]
     trial_time = run_log['global_clock'][trial_mask[-1]] - run_log['global_clock'][trial_mask[0]]
-    exceeds_timeout = trial_time >= TIMEOUT
-    cursor_in_target = in_target(cursor, target)
+    exceeds_timeout = round(trial_time, 1) >= TIMEOUT # account for rounding...
+    cursor_in_target = in_target(final_cursor, target)
     is_timeout_trial = exceeds_timeout and not cursor_in_target
-    is_unfinished_trial = not exceeds_timeout and not cursor_in_target
-    return is_timeout_trial, is_unfinished_trial
+    is_unfinished_trial = (not exceeds_timeout and not cursor_in_target) or len(trial_mask) <= 1
+    is_within_dof_trial = np.any(np.abs(np.array(target[:2]) - np.array(initial_cursor_location)) <= target[2] // 2)
+    return is_timeout_trial, is_unfinished_trial, is_within_dof_trial
 
 
 def in_target(cursor, target):
@@ -120,25 +145,6 @@ def extract_model_predictions(run_log):
     return predictions
 
 
-def extract_within_dof_trials(run_log):
-    within_dof_trial_mask = []
-    trials = np.unique(run_log['trial_number'])
-    for t in trials:
-        trial_mask = np.where(run_log['trial_number'] == t)[0]
-        initial_cursor_location = np.array(run_log['cursor_position'])[trial_mask][0][:2]
-        target = np.array(run_log['goal_target'])[trial_mask][0]
-        target_location = target[:2]
-        target_width = target[2]
-        if np.any(np.abs(target_location - initial_cursor_location) <= target_width // 2):
-            within_dof_trial_mask.extend(trial_mask)
-
-    # Return run_log just with correct trials
-    for key in run_log.keys():
-        run_log[key] = np.array(run_log[key])[within_dof_trial_mask]
-
-    return run_log
-
-
 def extract_fitts_metrics(run_log):
     fitts_results = {
         'timeouts': [],
@@ -150,20 +156,22 @@ def extract_fitts_metrics(run_log):
     trials = np.unique(run_log['trial_number'])
     for t in trials:
         trial_mask = np.where(run_log['trial_number'] == t)[0]
-        if t == trials[-1]:
-            # Skip the last trial for now - the pilot data is_uninfinished_trial doesn't work b/c of an edge case where timer starts before first timestamp so trial time isn't larger than timeout.
-            # This isn't needed if we change validation to be X trials always.
-            # TODO: When we're not looking at pilot data we should change this.
-            continue
-        is_timeout_trial, is_unfinished_trial = get_trial_flags(run_log, trial_mask)
+        # if t == trials[-1]:
+        #     # Skip the last trial for now - the pilot data is_uninfinished_trial doesn't work b/c of an edge case where timer starts before first timestamp so trial time isn't larger than timeout.
+        #     # This isn't needed if we change validation to be X trials always.
+        #     # TODO: When we're not looking at pilot data we should change this.
+        #     print(f"Skipping {t}")
+        #     continue
+        # is_timeout_trial, is_unfinished_trial = get_trial_flags(run_log, trial_mask)
 
         # if is_unfinished_trial:
         #     # Skip trials
         #     print(f"Skipping {t}")
         #     continue
 
-        if is_timeout_trial:
-            fitts_results['timeouts'].append(t)
+        # if is_timeout_trial:
+        #     fitts_results['timeouts'].append(t)
+
         fitts_results['throughput'].append(calculate_throughput(run_log, trial_mask))
         fitts_results['overshoots'].append(calculate_overshoots(run_log, trial_mask))
         fitts_results['efficiency'].append(calculate_efficiency(run_log, trial_mask))
@@ -216,10 +224,7 @@ def plot_fitts_metrics(participants, within_dof = False):
         model_overshoots = []
         bar_labels.append(format_model_names(model))
         for participant_idx, participant in enumerate(participants):
-            config = load_config(participant, model)
-            run_log = read_pickle_file(config.validation_fitts_file)
-            if within_dof:
-                run_log = extract_within_dof_trials(run_log)
+            run_log = load_run_log(participant, model, exclude_combined_dof_trials=within_dof)
             fitts_metrics = extract_fitts_metrics(run_log)
             model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
             model_efficiencies.append(fitts_metrics['efficiency'])
@@ -233,13 +238,15 @@ def plot_fitts_metrics(participants, within_dof = False):
 
             # Plot over time
             time_axs[0, model_idx].set_title(bar_labels[-1])
-            time_axs[0, model_idx].set_ylim((0, 1.2))
-            time_axs[1, model_idx].set_ylim((0, 1.2))
-            time_axs[2, model_idx].set_ylim((0, 10.0))
             time_axs[2, model_idx].set_xlabel('Trial #')
             plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
             plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
             plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
+
+            # Time series plots in a row share y-axis
+            time_axs[0, model_idx].sharey(time_axs[0, 0])
+            time_axs[1, model_idx].sharey(time_axs[1, 0])
+            time_axs[2, model_idx].sharey(time_axs[2, 0])
 
         mean_throughputs.append(np.mean(model_throughputs))
         mean_efficiencies.append(np.mean(model_efficiencies))
@@ -277,8 +284,7 @@ def plot_fitts_traces(participants):
     lines = []
     for model, ax in zip(MODELS, axs):
         for participant_idx, participant in enumerate(participants):
-            config = load_config(participant, model)
-            run_log = read_pickle_file(config.validation_fitts_file)
+            run_log = load_run_log(participant, model)
             traces = extract_traces(run_log)
             for trace in traces:
                 lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
@@ -309,8 +315,7 @@ def plot_dof_activation_heatmap(participants):
     for model_idx, model in enumerate(MODELS):
         model_predictions = []
         for participant in participants:
-            config = load_config(participant, model)
-            run_log = read_pickle_file(config.validation_fitts_file)
+            run_log = load_run_log(participant, model)
             predictions = extract_model_predictions(run_log)
             predictions = np.concatenate(predictions)
             model_predictions.append(predictions)
