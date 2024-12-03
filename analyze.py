@@ -10,6 +10,7 @@ import matplotlib as mpl
 from matplotlib.ticker import PercentFormatter
 import seaborn as sns
 
+from utils.adaptation import TIMEOUT
 from experiment import Config, MODELS
 
 
@@ -56,15 +57,19 @@ def load_config(participant, model):
     assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
     return Config.load(config_file[0])
 
-
-def is_unfinished_trial(run_log, trial_mask):
+def get_trial_flags(run_log, trial_mask):
     cursor = run_log['cursor_position'][trial_mask[-1]]
     target = run_log['goal_target'][trial_mask[-1]]
-    return not in_target(cursor, target)
+    trial_time = run_log['global_clock'][trial_mask[-1]] - run_log['global_clock'][trial_mask[0]]
+    exceeds_timeout = trial_time >= TIMEOUT
+    cursor_in_target = in_target(cursor, target)
+    is_timeout_trial = exceeds_timeout and not cursor_in_target
+    is_unfinished_trial = not exceeds_timeout and not cursor_in_target
+    return is_timeout_trial, is_unfinished_trial
 
 
 def in_target(cursor, target):
-    return math.dist(cursor[:2], target[:2]) < target[2]/2 + cursor[2]/2
+    return math.dist(cursor[:2], target[:2]) < (target[2]/2 + cursor[2]/2)
 
 
 def calculate_efficiency(run_log, trial_mask):
@@ -93,11 +98,6 @@ def calculate_overshoots(run_log, trial_mask):
         if in_bounds[i-1] == True and in_bounds[i] == False:
             overshoots += 1 
     return overshoots
-
-
-def is_timeout_trial(run_log, trial_mask):
-    trial_time = run_log['global_clock'][trial_mask[-1]] - run_log['global_clock'][trial_mask[0]]
-    return trial_time > 30
 
 
 def extract_traces(run_log):
@@ -150,12 +150,20 @@ def extract_fitts_metrics(run_log):
     trials = np.unique(run_log['trial_number'])
     for t in trials:
         trial_mask = np.where(run_log['trial_number'] == t)[0]
-        if len(trial_mask) <= 1 or is_unfinished_trial(run_log, trial_mask):
+        if t == trials[-1]:
+            # Skip the last trial for now - the pilot data is_uninfinished_trial doesn't work b/c of an edge case where timer starts before first timestamp so trial time isn't larger than timeout.
+            # This isn't needed if we change validation to be X trials always.
+            # TODO: When we're not looking at pilot data we should change this.
             continue
-        if is_timeout_trial(run_log, trial_mask):
-            # Ignore trial
+        is_timeout_trial, is_unfinished_trial = get_trial_flags(run_log, trial_mask)
+
+        # if is_unfinished_trial:
+        #     # Skip trials
+        #     print(f"Skipping {t}")
+        #     continue
+
+        if is_timeout_trial:
             fitts_results['timeouts'].append(t)
-            continue
         fitts_results['throughput'].append(calculate_throughput(run_log, trial_mask))
         fitts_results['overshoots'].append(calculate_overshoots(run_log, trial_mask))
         fitts_results['efficiency'].append(calculate_efficiency(run_log, trial_mask))
