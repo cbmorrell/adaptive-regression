@@ -14,13 +14,11 @@ from utils.adaptation import TIMEOUT
 from experiment import Config, MODELS
 
 
-DPI = 600
-
-
 class Plotter:
-    def __init__(self, participants, analysis):
+    def __init__(self, participants, analysis, dpi = 600):
         self.participants = participants
         self.analysis = analysis
+        self.dpi = dpi
         self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots
 
         if self.analysis == 'within':
@@ -86,7 +84,7 @@ class Plotter:
             model_throughputs = []
             model_efficiencies = []
             model_overshoots = []
-            bar_labels.append(format_model_names(model))
+            bar_labels.append(format_names(model))
             for participant_idx, participant in enumerate(self.participants):
                 run_log = self.read_log(participant, model)
                 fitts_metrics = extract_fitts_metrics(run_log)
@@ -128,9 +126,7 @@ class Plotter:
         bar_axs[0].set_title('Across Subjects')
 
         if len(self.participants) != 1:
-            # bar_axs[0].set_ylim((0, np.max(mean_throughputs) + 0.4))
-            # bar_axs[0].legend(handles.values(), handles.keys(), loc='upper center', ncols=2)
-            fig.legend(handles.values(), handles.keys(), loc='upper left', ncols=4)
+            time_axs[-1, -1].legend(handles.values(), format_names(handles.keys()), ncols=2)
 
         return fig
 
@@ -145,13 +141,13 @@ class Plotter:
                 for trace in traces:
                     lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
                 
-            ax.set_title(format_model_names(model))
+            ax.set_title(format_names(model))
             ax.set_xlabel('X (Pixels)')
         
         axs[0].set_ylabel('Y (Pixels)')
         if len(self.participants) != 1:
             legend_handles = get_unique_legend_handles(lines)
-            axs[-1].legend(legend_handles.values(), legend_handles.keys())
+            axs[-1].legend(legend_handles.values(), format_names(legend_handles.keys()))
 
         return fig
 
@@ -192,7 +188,7 @@ class Plotter:
 
             # Formatting
             fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
-            x_hist_ax.set_title(format_model_names(model))
+            x_hist_ax.set_title(format_names(model))
             heatmap_ax.set_xlabel('DoF Activation (Open / Close)')
             if model == self.models[0]:
                 heatmap_ax.set_ylabel('DoF Activation (Pro / Supination)')
@@ -218,7 +214,7 @@ class Plotter:
             title += f"({self.participants[0]})"
         filename += '.png'
         filepath = Path(self.results_path, filename)
-        fig.savefig(filepath, dpi=DPI)
+        fig.savefig(filepath, dpi=self.dpi)
         print(f"File saved to {filepath.as_posix()}.")
 
 
@@ -245,9 +241,19 @@ def get_unique_legend_handles(lines):
     return unique_lines
 
 
-def format_model_names(models):
+def format_names(models):
     def format_name(name):
-        return name.replace('-', ' ').title().replace('Sgt', 'SGT').replace('Ciil', 'CIIL')
+        replacements = (
+            ('Sgt', 'SGT'),
+            ('Ciil', 'CIIL'),
+            ('Within', 'W'),
+            ('Combined', 'C'),
+            ('Subject-', 'S')
+        )
+        formatted_name = name.title()
+        for replacement in replacements:
+            formatted_name = formatted_name.replace(replacement[0], replacement[1])
+        return formatted_name
 
     if isinstance(models, str):
         return format_name(models)
@@ -378,14 +384,14 @@ def plot_pilot_distance_vs_proportional_control():
 
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
-    parser.add_argument('-p', '--participants', default=None, help='List of participants to evaluate.')
+    parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
     parser.add_argument('-a', '--analysis', default='all', choices=('all', 'combined', 'within'), help='Subset of data to perform analysis on.')
     args = parser.parse_args()
     print(args)
 
     sns.set_theme(style='ticks', palette='Dark2')
 
-    if args.participants is None:
+    if args.participants == 'all':
         regex_filter = libemg.data_handler.RegexFilter('subject-', right_bound='/', values=[str(idx + 1).zfill(3) for idx in range(100)], description='')
         matching_directories = regex_filter.get_matching_files([path.as_posix() + '/' for path in Path('data').glob('*')])
         participants = [Path(participant).stem for participant in matching_directories]
