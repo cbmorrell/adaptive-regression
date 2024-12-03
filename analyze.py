@@ -14,7 +14,6 @@ from utils.adaptation import TIMEOUT
 from experiment import Config, MODELS
 
 
-MODELS = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])    # arrange in order that looks better for plots
 DPI = 600
 
 
@@ -22,6 +21,7 @@ class Plotter:
     def __init__(self, participants, analysis):
         self.participants = participants
         self.analysis = analysis
+        self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots
 
         if self.analysis == 'within':
             self.exclude_within_dof_trials = False
@@ -75,14 +75,14 @@ class Plotter:
         cmap = mpl.colormaps['Dark2']
         subfigs = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 3])
         bar_axs = subfigs[0].subplots(nrows=3, ncols=1, sharex=True)
-        time_axs = subfigs[1].subplots(nrows=3, ncols=len(MODELS), sharex=True)
+        time_axs = subfigs[1].subplots(nrows=3, ncols=len(self.models), sharex=True)
         lines = []
         bar_labels = []
         mean_throughputs = []
         mean_efficiencies = []
         mean_overshoots = []
         zorder = 2  # zorder=2 so points are plotted on top of bar plot
-        for model_idx, model in enumerate(MODELS):
+        for model_idx, model in enumerate(self.models):
             model_throughputs = []
             model_efficiencies = []
             model_overshoots = []
@@ -135,10 +135,10 @@ class Plotter:
         return fig
 
     def _plot_fitts_traces(self):
-        fig, axs = plt.subplots(nrows=1, ncols=len(MODELS), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
+        fig, axs = plt.subplots(nrows=1, ncols=len(self.models), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
         cmap = mpl.colormaps['Dark2']
         lines = []
-        for model, ax in zip(MODELS, axs):
+        for model, ax in zip(self.models, axs):
             for participant_idx, participant in enumerate(self.participants):
                 run_log = self.read_log(participant, model)
                 traces = extract_traces(run_log)
@@ -158,12 +158,12 @@ class Plotter:
     def _plot_dof_activation_heatmap(self):
         # Create heatmap where x is DOF 1 and y is DOF2
         fig = plt.figure(figsize=(16, 4), constrained_layout=True)
-        outer_grid = fig.add_gridspec(nrows=1, ncols=len(MODELS))
+        outer_grid = fig.add_gridspec(nrows=1, ncols=len(self.models))
         width_ratios = [2, 1]
         height_ratios = [1, 2]
         # num_bins = 40
         num_bins = 10
-        for model_idx, model in enumerate(MODELS):
+        for model_idx, model in enumerate(self.models):
             model_predictions = []
             for participant in self.participants:
                 run_log = self.read_log(participant, model)
@@ -194,7 +194,7 @@ class Plotter:
             fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
             x_hist_ax.set_title(format_model_names(model))
             heatmap_ax.set_xlabel('DoF Activation (Open / Close)')
-            if model == MODELS[0]:
+            if model == self.models[0]:
                 heatmap_ax.set_ylabel('DoF Activation (Pro / Supination)')
         
         return fig
