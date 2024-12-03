@@ -7,7 +7,7 @@ import libemg
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from libemg.environments.controllers import RegressorController
+from matplotlib.ticker import PercentFormatter
 import seaborn as sns
 
 from experiment import Config, MODELS
@@ -51,7 +51,7 @@ def format_model_names(models):
     return [format_name(model) for model in models]
 
 
-def get_config(participant, model):
+def load_config(participant, model):
     config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
     assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
     return Config.load(config_file[0])
@@ -110,13 +110,12 @@ def extract_traces(run_log):
 
 
 def extract_model_predictions(run_log):
-    controller = RegressorController()
     trials = np.unique(run_log['trial_number'])
     predictions = []
     for t in trials:
         trial_mask = np.where(run_log['trial_number'] == t)[0]
         model_outputs = np.array(run_log['class_label'])[trial_mask]
-        model_outputs = [controller._parse_predictions(model_output) for model_output in model_outputs]
+        model_outputs = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_outputs]
         predictions.append(model_outputs)
     return predictions
 
@@ -209,7 +208,7 @@ def plot_fitts_metrics(participants, within_dof = False):
         model_overshoots = []
         bar_labels.append(format_model_names(model))
         for participant_idx, participant in enumerate(participants):
-            config = get_config(participant, model)
+            config = load_config(participant, model)
             run_log = read_pickle_file(config.validation_fitts_file)
             if within_dof:
                 run_log = extract_within_dof_trials(run_log)
@@ -270,7 +269,7 @@ def plot_fitts_traces(participants):
     lines = []
     for model, ax in zip(MODELS, axs):
         for participant_idx, participant in enumerate(participants):
-            config = get_config(participant, model)
+            config = load_config(participant, model)
             run_log = read_pickle_file(config.validation_fitts_file)
             traces = extract_traces(run_log)
             for trace in traces:
@@ -291,60 +290,51 @@ def plot_fitts_traces(participants):
         fig.savefig(RESULTS_PATH.joinpath('fitts-traces.png'), dpi=DPI)
 
 
-def plot_dof_activation_heatmap(subject_info):
-    raise NotImplementedError('This has not been converted to current code yet.')
+def plot_dof_activation_heatmap(participants):
     # Create heatmap where x is DOF 1 and y is DOF2
-    subjects = np.array([subject[0] for subject in subject_info])
-    models = np.array([subject[1] for subject in subject_info])
-    fig = plt.figure(figsize=(16, 8), constrained_layout=True)
-    outer_grid = fig.add_gridspec(nrows=len(np.unique(models)), ncols=len(config_parser.behaviours))
+    fig = plt.figure(figsize=(16, 4), constrained_layout=True)
+    outer_grid = fig.add_gridspec(nrows=1, ncols=len(MODELS))
     width_ratios = [2, 1]
     height_ratios = [1, 2]
-    num_bins = 40
-    for model_idx, model in enumerate(np.unique(models)):
-        model_subjects = subjects[models == model]
-        for behaviour_idx, behaviour in enumerate(config_parser.behaviours):
-            model_behaviour_predictions = []
-            for subject in model_subjects:
-                results_file = os.path.join(config_parser.data_path, behaviour, subject, 'fitts.pkl')
-                run_log = read_pickle(results_file)
-                predictions = extract_model_predictions(run_log)
-                predictions = np.concatenate(predictions)
-                model_behaviour_predictions.append(predictions)
-            model_behaviour_predictions = np.concatenate(model_behaviour_predictions)
+    # num_bins = 40
+    num_bins = 10
+    for model_idx, model in enumerate(MODELS):
+        model_predictions = []
+        for participant in participants:
+            config = load_config(participant, model)
+            run_log = read_pickle_file(config.validation_fitts_file)
+            predictions = extract_model_predictions(run_log)
+            predictions = np.concatenate(predictions)
+            model_predictions.append(predictions)
+        model_predictions = np.concatenate(model_predictions)
 
+        # Format heatmap + histogram axes
+        inner_grid = outer_grid[model_idx].subgridspec(nrows=2, ncols=2, width_ratios=width_ratios, height_ratios=height_ratios)
+        axs = inner_grid.subplots()
+        heatmap_ax = axs[1, 0]
+        x_hist_ax = axs[0, 0]
+        y_hist_ax = axs[1, 1]
+        axs[0, 1].set_axis_off()    # hide unused axis
 
-            # Format heatmap + histogram axes
-            inner_grid = outer_grid[model_idx, behaviour_idx].subgridspec(nrows=2, ncols=2, width_ratios=width_ratios, height_ratios=height_ratios)
-            axs = inner_grid.subplots()
-            heatmap_ax = axs[1, 0]
-            x_hist_ax = axs[0, 0]
-            y_hist_ax = axs[1, 1]
-            axs[0, 1].set_axis_off()    # hide unused axis
+        # Plot
+        value_range = np.array([[-1, 1], [-1, 1]])
+        x_predictions = model_predictions[:, 0]
+        y_predictions = model_predictions[:, 1]
+        _, _, _, heatmap = heatmap_ax.hist2d(x_predictions, y_predictions, bins=num_bins, range=value_range)
+        x_counts, _, _ = x_hist_ax.hist(x_predictions, bins=num_bins, range=value_range[0])
+        y_counts, _, _ = y_hist_ax.hist(y_predictions, bins=num_bins, range=value_range[0], orientation='horizontal')
+        x_hist_ax.yaxis.set_major_formatter(PercentFormatter(xmax=sum(x_counts), decimals=0))
+        y_hist_ax.xaxis.set_major_formatter(PercentFormatter(xmax=sum(y_counts), decimals=0))
 
-            # Plot
-            value_range = np.array([[-1, 1], [-1, 1]])
-            x_predictions = model_behaviour_predictions[:, 0]
-            y_predictions = model_behaviour_predictions[:, 1]
-            _, _, _, heatmap = heatmap_ax.hist2d(x_predictions, y_predictions, bins=num_bins, range=value_range)
-            x_counts, _, _ = x_hist_ax.hist(x_predictions, bins=num_bins, range=value_range[0])
-            y_counts, _, _ = y_hist_ax.hist(y_predictions, bins=num_bins, range=value_range[0], orientation='horizontal')
-            x_hist_ax.yaxis.set_major_formatter(PercentFormatter(xmax=sum(x_counts), decimals=0))
-            y_hist_ax.xaxis.set_major_formatter(PercentFormatter(xmax=sum(y_counts), decimals=0))
-
-            # Formatting
-            fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
-            if model == np.unique(models)[0]:
-                x_hist_ax.set_title(format_title(behaviour))
-            if model == np.unique(models)[-1]:
-                heatmap_ax.set_xlabel('DOF Activation (Open / Close)')
-            if behaviour == config_parser.behaviours[0]:
-                heatmap_ax.set_ylabel('DOF Activation (Pro / Supination)')
-            if behaviour == config_parser.behaviours[-1]:
-                y_hist_ax.yaxis.set_label_position('right')
-                y_hist_ax.set_ylabel(model)
+        # Formatting
+        fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
+        x_hist_ax.set_title(format_model_names(model))
+        heatmap_ax.set_xlabel('DoF Activation (Open / Close)')
+        if model == MODELS[0]:
+            heatmap_ax.set_ylabel('DoF Activation (Pro / Supination)')
+    
     fig.suptitle('DOF Activation Heatmap')
-    fig.savefig('results/fitts-heatmap.png', dpi=400)
+    fig.savefig(RESULTS_PATH.joinpath('fitts-heatmap.png'), dpi=DPI)
 
 
 def main():
@@ -367,6 +357,7 @@ def main():
     plot_fitts_metrics(participants)
     plot_fitts_metrics(participants, within_dof=True)
     plot_fitts_traces(participants)
+    plot_dof_activation_heatmap(participants)
     
     # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
