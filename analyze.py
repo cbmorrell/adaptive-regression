@@ -15,11 +15,15 @@ from experiment import Config, MODELS
 
 
 class Plotter:
-    def __init__(self, participants, analysis, dpi = 600):
+    def __init__(self, participants, analysis, dpi = 600, stage = 'validation'):
         self.participants = participants
         self.analysis = analysis
         self.dpi = dpi
-        self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots
+        self.stage = stage
+        self.plot_adaptation = self.stage == 'adaptation'
+        self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
+        if self.plot_adaptation:
+            self.models = self.models[-2:]  # only take adaptive models
 
         if self.analysis == 'within':
             self.exclude_within_dof_trials = False
@@ -32,14 +36,19 @@ class Plotter:
             self.exclude_combined_dof_trials = False
         self.exclude_timeout_trials = False
 
-        self.results_path = Path('results', self.analysis)
+        self.results_path = Path('results', self.analysis, self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
     def read_log(self, participant, model):
         config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
         assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
         config = Config.load(config_file[0])
-        run_log = read_pickle_file(config.validation_fitts_file)
+        if self.plot_adaptation:
+            fitts_file = config.adaptation_fitts_file
+        else:
+            fitts_file = config.validation_fitts_file
+
+        run_log = read_pickle_file(fitts_file)
 
         filter_mask = []
         for t in np.unique(run_log['trial_number']):
@@ -152,6 +161,7 @@ class Plotter:
         return fig
 
     def _plot_dof_activation_heatmap(self):
+        # TODO: Change colormap / scaling (probably to non-linear scaling)
         # Create heatmap where x is DOF 1 and y is DOF2
         fig = plt.figure(figsize=(16, 4), constrained_layout=True)
         outer_grid = fig.add_gridspec(nrows=1, ncols=len(self.models))
@@ -385,7 +395,8 @@ def plot_pilot_distance_vs_proportional_control():
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
-    parser.add_argument('-a', '--analysis', default='all', choices=('all', 'combined', 'within'), help='Subset of data to perform analysis on.')
+    parser.add_argument('-a', '--analysis', default='all', choices=('all', 'combined', 'within'), help='Subset of tasks to perform analysis on.')
+    parser.add_argument('-s', '--stage', default='validation', choices=('adaptation', 'validation'), help='Stage to analyze.')
     args = parser.parse_args()
     print(args)
 
@@ -399,7 +410,7 @@ def main():
     else:
         participants = str(args.participants).replace(' ', '').split(',')
 
-    plotter = Plotter(participants, args.analysis)
+    plotter = Plotter(participants, args.analysis, stage=args.stage)
     plotter.plot('fitts-metrics')
     plotter.plot('fitts-traces')
     plotter.plot('heatmap')
