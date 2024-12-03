@@ -349,6 +349,7 @@ def main():
         regex_filter = libemg.data_handler.RegexFilter('subject-', right_bound='/', values=[str(idx + 1).zfill(3) for idx in range(100)], description='')
         matching_directories = regex_filter.get_matching_files([path.as_posix() + '/' for path in Path('data').glob('*')])
         participants = [Path(participant).stem for participant in matching_directories]
+        participants.sort()
     else:
         participants = str(args.participants).replace(' ', '').split(',')
 
