@@ -15,7 +15,7 @@ from experiment import Config, MODELS
 
 
 class Plotter:
-    def __init__(self, participants, analysis, dpi = 600, stage = 'validation'):
+    def __init__(self, participants, analysis, dpi = 400, stage = 'validation'):
         self.participants = participants
         self.analysis = analysis
         self.dpi = dpi
