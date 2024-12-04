@@ -172,9 +172,9 @@ def project_prediction(prediction, optimal_direction):
     return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
 
 
-def distance_to_proportional_control(optimal_direction):
+def distance_to_proportional_control(distance):
     # NOTE: These mappings were decided based on piloting
-    result = np.sqrt(np.linalg.norm(optimal_direction / ISOFITTS_RADIUS))   # normalizing by half of distance between targets
+    result = np.sqrt((distance - TARGET_RADIUS) / ISOFITTS_RADIUS)   # normalizing by half of distance between targets
     # result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))    # sigmoid
     return min(1, result)   # bound result to 1
 
@@ -182,7 +182,20 @@ def distance_to_proportional_control(optimal_direction):
 def assign_ciil_label(prediction, optimal_direction, outcomes):
     positive_mask = outcomes == 'P'
     num_positive_components = positive_mask.sum()
-    if num_positive_components == 2:
+    # deadband_threshold = 0.1
+    # below_threshold = np.linalg.norm(prediction) <= deadband_threshold
+    # outside_expected_range = distance_to_proportional_control(optimal_direction) > deadband_threshold
+    buffer = 1.5 * TARGET_RADIUS
+    outside_expected_range = np.linalg.norm(optimal_direction) > buffer
+    below_threshold = np.linalg.norm(prediction) < distance_to_proportional_control(buffer)
+    # print(below_threshold, outside_expected_range, distance_to_proportional_control(buffer), buffer)
+
+    # TODO: modify so it's based on EMG activity, not the prediction (similar to active threshold with classification but use SGT NM data)
+    # TODO: Another question: should we be doing a deadband for the SGT models or no?
+    if num_positive_components == 0 or (below_threshold and outside_expected_range):
+        # Wrong quadrant or no motion when far from target - ignore this
+        adaptation_labels = None
+    elif num_positive_components == 2:
         # Correct quadrant - point prediction to optimal direction (later normalized to correct magnitude)
         adaptation_labels = np.copy(optimal_direction)
     elif num_positive_components == 1:
@@ -191,8 +204,7 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
         adaptation_labels[positive_mask] = np.sign(prediction[positive_mask])
         adaptation_labels[~positive_mask] = 0.
     else:
-        # Wrong quadrant - ignore this
-        adaptation_labels = None
+        raise ValueError(f"Unexpected value when assigning CIIL label. Got: {prediction}, {optimal_direction}, {outcomes}.")
 
     return adaptation_labels
 
@@ -225,7 +237,15 @@ def make_pseudo_labels(environment_data, smm, approach):
     else:
         # outcomes = np.array(['P' if np.sign(prediction_component) == np.sign(direction_component) and np.abs(direction_component) > TARGET_RADIUS else 'N'
         #                      for prediction_component, direction_component in zip(prediction, optimal_direction)])
-        outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
+        # outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
+
+        outcomes = []
+        for prediction_component, direction_component in zip(prediction, optimal_direction):
+            correct_direction = np.sign(prediction_component) == np.sign(direction_component)
+            in_target_runway = np.abs(direction_component) <= TARGET_RADIUS
+            outcome = 'P' if correct_direction and not in_target_runway else 'N'
+            outcomes.append(outcome)
+        outcomes = np.array(outcomes)
         if approach == 'ciil':
             adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)
         elif approach == 'oracle':
@@ -235,9 +255,9 @@ def make_pseudo_labels(environment_data, smm, approach):
 
         if adaptation_labels is not None:
             # Normalize to correct magnitude - p = inf b/c (1, 1) should move the same speed as (1, 0)
-            adaptation_labels *= distance_to_proportional_control(optimal_direction) / np.linalg.norm(adaptation_labels, ord=np.inf)
+            adaptation_labels *= distance_to_proportional_control(np.linalg.norm(optimal_direction)) / np.linalg.norm(adaptation_labels, ord=np.inf)
 
-    # print(outcomes, prediction, adaptation_labels)
+    # print(optimal_direction, outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)
