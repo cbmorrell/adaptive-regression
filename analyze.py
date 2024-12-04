@@ -216,12 +216,11 @@ class Plotter:
             raise ValueError(f"Unexpected value for plot_type. Got: {plot_type}.")
 
         title = f"{plot_type} {self.analysis} Trials".replace('-', ' ').title()
-        fig.suptitle(title)
-
         filename = plot_type
         if len(self.participants) == 1:
             filename += f"-{self.participants[0]}"
-            title += f"({self.participants[0]})"
+            title += f" ({self.participants[0]})"
+        fig.suptitle(title)
         filename += '.png'
         filepath = Path(self.results_path, filename)
         fig.savefig(filepath, dpi=self.dpi)
