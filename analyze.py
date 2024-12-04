@@ -7,7 +7,7 @@ import libemg
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from matplotlib.ticker import PercentFormatter
+from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
 from utils.adaptation import TIMEOUT
@@ -162,14 +162,13 @@ class Plotter:
         return fig
 
     def _plot_dof_activation_heatmap(self):
-        # TODO: Change colormap / scaling (probably to non-linear scaling)
         # Create heatmap where x is DOF 1 and y is DOF2
-        fig = plt.figure(figsize=(16, 4), constrained_layout=True)
+        fig = plt.figure(figsize=(20, 5), constrained_layout=True)
         outer_grid = fig.add_gridspec(nrows=1, ncols=len(self.models))
         width_ratios = [2, 1]
         height_ratios = [1, 2]
-        # num_bins = 40
-        num_bins = 10
+        bins = np.round(np.arange(-1.1, 1.2, 0.2), 2)  # extend past 1 to include 1 in arange
+        ticks = np.arange(bins.shape[0])
         for model_idx, model in enumerate(self.models):
             model_predictions = []
             for participant in self.participants:
@@ -191,18 +190,23 @@ class Plotter:
             value_range = np.array([[-1, 1], [-1, 1]])
             x_predictions = model_predictions[:, 0]
             y_predictions = model_predictions[:, 1]
-            _, _, _, heatmap = heatmap_ax.hist2d(x_predictions, y_predictions, bins=num_bins, range=value_range)
-            x_counts, _, _ = x_hist_ax.hist(x_predictions, bins=num_bins, range=value_range[0])
-            y_counts, _, _ = y_hist_ax.hist(y_predictions, bins=num_bins, range=value_range[0], orientation='horizontal')
-            x_hist_ax.yaxis.set_major_formatter(PercentFormatter(xmax=sum(x_counts), decimals=0))
-            y_hist_ax.xaxis.set_major_formatter(PercentFormatter(xmax=sum(y_counts), decimals=0))
+            x_y_counts, _, _ = np.histogram2d(x_predictions, y_predictions, bins=bins, density=True)
+            x_hist_ax.hist(x_predictions, bins=bins)
+            y_hist_ax.hist(y_predictions, bins=bins, orientation='horizontal')
+            heatmap = sns.heatmap(x_y_counts, ax=heatmap_ax, cmap=sns.light_palette('seagreen', as_cmap=True), norm=mpl.colors.LogNorm())
 
             # Formatting
-            fig.colorbar(heatmap, ax=heatmap_ax, format=PercentFormatter(xmax=sum(x_counts) + sum(y_counts), decimals=1))
+            colorbar = heatmap.collections[0].colorbar
+            colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
+            colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=1))
+            heatmap_ax.set_xticks(ticks, bins, rotation=90)
+            heatmap_ax.set_yticks(ticks, bins, rotation=0)
+            heatmap_ax.set_xlabel('Open / Close Activation')
+            x_hist_ax.set_xticks(bins, bins, rotation=90)
+            y_hist_ax.set_yticks(bins, bins, rotation=0)
             x_hist_ax.set_title(format_names(model))
-            heatmap_ax.set_xlabel('DoF Activation (Open / Close)')
             if model == self.models[0]:
-                heatmap_ax.set_ylabel('DoF Activation (Pro / Supination)')
+                heatmap_ax.set_ylabel('Pro / Supination Activation')
         
         return fig
 
