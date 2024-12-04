@@ -11,7 +11,7 @@ from matplotlib.ticker import PercentFormatter
 import seaborn as sns
 
 from utils.adaptation import TIMEOUT
-from experiment import Config, MODELS
+from experiment import MODELS, Participant, make_config
 
 
 class Plotter:
@@ -39,10 +39,11 @@ class Plotter:
         self.results_path = Path('results', self.analysis, self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
-    def read_log(self, participant, model):
-        config_file = [file for file in Path('data').rglob('config.json') if participant in file.as_posix() and model in file.as_posix()]
-        assert len(config_file) == 1, f"Expected a single matching config file, but got {config_file}."
-        config = Config.load(config_file[0])
+    def read_log(self, participant_id, model):
+        participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix()]
+        assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id} {model}, but got {participant_files}."
+        participant = Participant.load(participant_files[0])
+        config = make_config(participant, model)
         if self.plot_adaptation:
             fitts_file = config.adaptation_fitts_file
         else:
@@ -54,14 +55,14 @@ class Plotter:
         for t in np.unique(run_log['trial_number']):
             trial_mask = np.where(run_log['trial_number'] == t)[0]
             is_timeout_trial, is_unfinished_trial, is_within_dof_trial = get_trial_flags(run_log, trial_mask)
-            if participant == 'subject-002' and model == 'within-sgt' and t == 0:
+            if participant_id == 'subject-002' and model == 'within-sgt' and t == 0:
                 # Handling edge case for first trial being a timeout
                 is_unfinished_trial = False
                 is_timeout_trial = True
 
             if (is_timeout_trial and self.exclude_timeout_trials) or (is_within_dof_trial and self.exclude_within_dof_trials) or (not is_within_dof_trial 
                 and self.exclude_combined_dof_trials) or is_unfinished_trial:
-                print(f"Skipping {participant} {model} trial {t}.")
+                print(f"Skipping {participant_id} {model} trial {t}.")
                 continue
 
             filter_mask.extend(trial_mask)
