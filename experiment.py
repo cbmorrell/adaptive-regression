@@ -23,6 +23,58 @@ MODELS = ('ciil', 'combined-sgt', 'oracle', 'within-sgt')   # TODO: change the o
 
 
 @dataclass(frozen=True)
+class Participant:
+    path: str
+    dominant_hand: str
+    device_name: str
+    id: str
+    condition_order: list
+    mapping: str
+
+    def __post_init__(self):
+        Path(self.path).mkdir(parents=True, exist_ok=True)
+
+    def save(self):
+        filepath = Path(self.path, 'participant.json')
+        with open(filepath, 'w') as f:
+            json.dump(asdict(self), f)
+        print('Saved to: ', filepath.as_posix())
+
+    @staticmethod
+    def load(filename):
+        with open(filename, 'r') as f:
+            participant = Participant(**json.load(f))
+        return participant
+
+
+def make_participant(path, dominant_hand, device):
+    id = Path(path).stem
+
+    # Balanced latin square for 4 conditions
+    conditions = np.array(MODELS)
+    latin_square = np.array([
+        [0, 1, 2, 3],
+        [1, 2, 0, 3],
+        [2, 3, 1, 0],
+        [3, 0, 2, 1]
+    ])
+
+    # Determine model based on latin square
+    participant_idx = (int(id[-3:]) - 1) % len(latin_square)
+    condition_order_mask = latin_square[participant_idx]
+    condition_order = conditions[condition_order_mask]
+
+    if dominant_hand == 'right':
+        mapping = 'polar-'
+    elif dominant_hand == 'left':
+        mapping = 'polar+'
+    else:
+        raise ValueError(f"Unexpected value for handedness. Got: {dominant_hand}.")
+
+    return Participant(path, dominant_hand, device, id, list(condition_order), mapping)
+
+
+@dataclass(frozen=True)
 class Config:
     LOSS_FUNCTION: ClassVar[str] = 'L1'
     IMAGE_DIRECTORY: ClassVar[str] = 'images/'
@@ -33,130 +85,68 @@ class Config:
     WINDOW_LENGTH_MS: ClassVar[int] = 150 #ms
     WINDOW_INCREMENT_MS: ClassVar[int] = 40 #ms
 
-    subject_directory: str
-    dominant_hand: str
-    device_name: str
-    condition_idx: int
+    participant: Participant
+    device: Device
+    window_length: int
+    window_increment: int
+    features: list
+    feature_dictionary: dict
+    model: str
+    model_is_adaptive: bool
+    use_combined_data: bool
+    animation_location: str
+    data_directory: str
+    num_reps: int
+    sgt_model_file: str
+    adaptation_model_file: str
+    adaptation_fitts_file: str
+    validation_fitts_file: str
 
-    def __post_init__(self):
-        Path(self.subject_directory).mkdir(parents=True, exist_ok=True)
 
-    @property
-    def device(self):
-        return Device(self.device_name)
+def make_config(participant: Participant, condition: int | str):
+    device = Device(participant.device_name)
 
-    @property
-    def model_is_adaptive(self):
-        if self.model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
-            return False
-        elif self.model in ['ciil', 'oracle']: # sgt adaptation
-            return True
-        else:
-            raise ValueError(f"Unexpected value for self.model. Got: {self.model}.")
+    window_length = int((Config.WINDOW_LENGTH_MS * device.fs) / 1000)
+    window_increment = int((Config.WINDOW_INCREMENT_MS * device.fs) / 1000)
+    features = ['WENG']
+    feature_dictionary = {'WENG_fs': device.fs}
 
-    @property
-    def window_length(self):
-        return int((self.WINDOW_LENGTH_MS*self.device.fs)/1000)
+    if isinstance(condition, str):
+        # Passed in model directly
+        model = condition
+    else:
+        model = participant.condition_order[condition]
 
-    @property
-    def window_increment(self):
-        return int((self.WINDOW_INCREMENT_MS*self.device.fs)/1000)
-
-    @property
-    def features(self):
-        return ['WENG']
-
-    @property
-    def feature_dictionary(self):
-        return {'WENG_fs': self.device.fs}
-
-    @property
-    def subject_id(self):
-        return Path(self.subject_directory).stem
-
-    @property
-    def condition_order(self):
-        # Balanced latin square for 4 conditions
-        conditions = np.array(MODELS)
-        latin_square = np.array([
-            [0, 1, 2, 3],
-            [1, 2, 0, 3],
-            [2, 3, 1, 0],
-            [3, 0, 2, 1]
-        ])
-
-        # Determine model based on latin square
-        subject_id = Path(self.subject_directory).stem
-        subject_idx = (int(subject_id[-3:]) - 1) % len(latin_square)
-        condition_idx_order = latin_square[subject_idx]
-        return conditions[condition_idx_order]
-
-    @property
-    def model(self):
-        return self.condition_order[self.condition_idx]
+    if model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
+        model_is_adaptive = False
+    elif model in ['ciil', 'oracle']: # sgt adaptation
+        model_is_adaptive = True
+    else:
+        raise ValueError(f"Unexpected value for self.model. Got: {model}.")
     
-    @property
-    def use_combined_data(self):
-        return 'combined' in self.model
+    use_combined_data = 'combined' in model
 
-    @property
-    def animation_location(self):
-        if self.use_combined_data:
-            animation_location = Path('animation', 'combined').absolute().as_posix()
-        else:
-            animation_location = Path('animation', 'within').absolute().as_posix()
-        return animation_location
+    if use_combined_data:
+        animation_location = Path('animation', 'combined').absolute().as_posix()
+    else:
+        animation_location = Path('animation', 'within').absolute().as_posix()
 
-    @property
-    def data_directory(self):
-        return Path(self.subject_directory, self.model).absolute().as_posix()
+    data_directory = Path(participant.path, model).absolute().as_posix()
 
-    @property
-    def num_reps(self):
-        if self.model_is_adaptive:
-            return 1
-        elif 'combined' in self.model:
-            return 3    # 3 of each video
-        else:
-            return 6    # 6 50-second videos makes 5 minutes
+    if model_is_adaptive:
+        num_reps = 1
+    elif 'combined' in model:
+        num_reps = 3    # 3 of each video
+    else:
+        num_reps = 6    # 6 50-second videos makes 5 minutes
 
-    @property
-    def sgt_model_file(self):
-        return Path(self.data_directory, 'sgt_mdl.pkl').absolute().as_posix()
+    sgt_model_file = Path(data_directory, 'sgt_mdl.pkl').absolute().as_posix()
+    adaptation_model_file = Path(data_directory, 'adaptation_mdl.pkl').absolute().as_posix()
+    adaptation_fitts_file = Path(sgt_model_file).with_name('adaptation_fitts.pkl').as_posix()
+    validation_fitts_file = Path(sgt_model_file).with_name('validation_fitts.pkl').as_posix()
 
-    @property
-    def adaptation_model_file(self):
-        return Path(self.data_directory, 'adaptation_mdl.pkl').absolute().as_posix()
-
-    @property
-    def adaptation_fitts_file(self):
-        return Path(self.sgt_model_file).with_name('adaptation_fitts.pkl').as_posix()
-
-    @property
-    def validation_fitts_file(self):
-        return Path(self.sgt_model_file).with_name('validation_fitts.pkl').as_posix()
-
-    @property
-    def mapping(self):
-        if self.dominant_hand == 'right':
-            return 'polar-'
-        elif self.dominant_hand == 'left':
-            return 'polar+'
-        else:
-            raise ValueError(f"Unexpected value for handedness. Got: {self.dominant_hand}.")
-
-    def save(self):
-        config_file = Path(self.sgt_model_file).with_name('config.json')
-        config_file.parent.mkdir(parents=True, exist_ok=False) # if the path already exists we'd have a latin square error, so throw an error
-        with open(config_file, 'w') as f:
-            json.dump(asdict(self), f)
-        print('Saved to: ', config_file.as_posix())
-
-    @staticmethod
-    def load(filename):
-        with open(filename, 'r') as f:
-            config = Config(**json.load(f))
-        return config
+    return Config(participant, device, window_length, window_increment, features, feature_dictionary, model, model_is_adaptive, use_combined_data,
+                  animation_location, data_directory, num_reps, sgt_model_file, adaptation_model_file, adaptation_fitts_file, validation_fitts_file)
 
 
 class Experiment:
@@ -164,9 +154,10 @@ class Experiment:
         self.config = config
 
         # Check for latin square order
-        completed_models = [path.stem for path in Path(self.config.subject_directory).glob('*') 
-                            if path.is_dir() and path.stem in self.config.condition_order and any(path.iterdir()) and path.stem != self.config.model]
-        expected_models = self.config.condition_order[:self.config.condition_idx]
+        condition_idx = self.config.participant.condition_order.index(self.config.model)
+        completed_models = [path.stem for path in Path(self.config.participant.path).glob('*') 
+                            if path.is_dir() and path.stem in self.config.participant.condition_order and any(path.iterdir()) and path.stem != self.config.model]
+        expected_models = self.config.participant.condition_order[:condition_idx]
         assert set(completed_models) == set(expected_models), f"Mismatched latin square order. Expected {expected_models} to be completed, but got {completed_models}."
 
         self.stage = stage
@@ -243,7 +234,7 @@ class Experiment:
         offdh = libemg.data_handler.OfflineDataHandler()
         regex_filters = [
             libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2","3","4"], "reps"),
-            libemg.data_handler.RegexFilter("/", "/",[str(self.config.subject_id)], "subjects"),
+            libemg.data_handler.RegexFilter("/", "/",[str(self.config.participant.id)], "subjects"),
             libemg.data_handler.RegexFilter('/', '/', [self.config.model], 'model_data')
         ]
         offdh.get_data(self.config.data_directory, regex_filters, metadata_fetchers, ",")
@@ -482,7 +473,7 @@ class Experiment:
             save_file = self.config.validation_fitts_file
             memory_process = None
             adapt_process = None
-        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=self.adapt, mapping=self.config.mapping)
+        isofitts = AdaptationFitts(self.shared_memory_items, save_file=save_file, adapt=self.adapt, mapping=self.config.participant.mapping)
         isofitts.run()
 
         if memory_process is not None:
