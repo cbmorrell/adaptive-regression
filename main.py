@@ -2,7 +2,7 @@ import argparse
 
 import libemg
 
-from experiment import Experiment, Config
+from experiment import Experiment, Participant, make_participant, make_config
 
 def main():
     # CLI arguments
@@ -13,10 +13,10 @@ def main():
     config_parser.add_argument('subject_directory', type=str, help='Directory to store data in. Stem will be taken as subject ID.')
     config_parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
     config_parser.add_argument('dominant_hand', type=str, choices=('left', 'right'), help='Dominant hand of participant. Determines direction for Fitts.')
-    config_parser.add_argument('condition_idx', type=int, help='Index of current condition (starts at 0).')
 
     run_parser = subparsers.add_parser('run', description='Collect data.')
-    run_parser.add_argument('config_path', type=str, help='Path to configuration file.')
+    run_parser.add_argument('participant', type=str, help='Path to configuration file.')
+    run_parser.add_argument('condition_idx', type=int, help='Index of current condition (starts at 0).')
     run_parser.add_argument('stage', type=str, choices=('sgt', 'adaptation', 'validation'), help='Stage of experiment.')
     run_parser.add_argument('--analyze', action='store_true', help='Flag to call analyze_hardware() method.')
 
@@ -24,11 +24,12 @@ def main():
     print(args)
 
     if args.objective == 'config':
-        config = Config(args.subject_directory, args.dominant_hand, args.device, args.condition_idx)
-        config.save()
+        participant = make_participant(args.subject_directory, args.dominant_hand, args.device)
+        participant.save()
         return
 
-    config = Config.load(args.config_path)
+    participant = Participant.load(args.participant)
+    config = make_config(participant, args.condition_idx)
 
     experiment = Experiment(config, args.stage)
     smm = libemg.shared_memory_manager.SharedMemoryManager()
@@ -45,8 +46,7 @@ def main():
     else:
         experiment.run_isofitts(online_data_handler)
 
-    # TODO: Should we add that context to CIIL where if it's in the target radius it's always 0 in that direction?
-    # TODO: Erik also mentioned maybe prompting the user with the rotational fitts interface instead of the cartesian prompt
+    # TODO: Erik also mentioned maybe prompting the user with the rotational fitts interface instead of the cartesian prompt... probably just prompt with bars instead?
 
     print('------------------Main script complete------------------')
 
