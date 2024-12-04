@@ -408,7 +408,7 @@ class Experiment:
             except:
                 logging.error("ADAPTMANAGER: "+traceback.format_exc())
         else:
-            print("AdaptManager Finished!")
+            print("adapt_manager Finished!")
             smm.modify_variable('memory_update_flag', lambda _: DONE_TASK)
             memory.write(self.config.data_directory, 1000)
             with open(self.config.adaptation_model_file, 'wb') as handle:
