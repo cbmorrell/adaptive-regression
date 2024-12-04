@@ -205,6 +205,8 @@ class Plotter:
             x_hist_ax.set_xticks(bins, bins, rotation=90)
             y_hist_ax.set_yticks(bins, bins, rotation=0)
             x_hist_ax.set_title(format_names(model))
+            x_hist_ax.set_ylabel('Frequency')
+            y_hist_ax.set_xlabel('Frequency')
             if model == self.models[0]:
                 heatmap_ax.set_ylabel('Pro / Supination Activation')
         
