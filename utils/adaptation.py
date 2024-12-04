@@ -172,14 +172,10 @@ def project_prediction(prediction, optimal_direction):
     return (np.dot(prediction, optimal_direction) / np.dot(optimal_direction, optimal_direction)) * optimal_direction
 
 
-def distance_to_proportional_control(optimal_direction, method = 'sqrt'):
+def distance_to_proportional_control(optimal_direction):
     # NOTE: These mappings were decided based on piloting
-    if method == 'sqrt':
-        result = np.sqrt(np.linalg.norm(optimal_direction / ISOFITTS_RADIUS))   # normalizing by half of distance between targets
-    elif method == 'sigmoid':
-        result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))
-    else:
-        raise ValueError(f"Unexpected value for method. Got: {method}.")
+    result = np.sqrt(np.linalg.norm(optimal_direction / ISOFITTS_RADIUS))   # normalizing by half of distance between targets
+    # result = 0.2 / (1 + np.exp(-0.05 * (np.linalg.norm(optimal_direction) - 250)))    # sigmoid
     return min(1, result)   # bound result to 1
 
 
