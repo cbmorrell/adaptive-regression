@@ -343,7 +343,7 @@ class Experiment:
         for item in self.shared_memory_items:
             smm.find_variable(*item)
 
-        # initialize the memomry
+        # initialize the memory
         memory = self.offdh_to_memory()
         memory_id = 0
         num_memories = 0
@@ -415,11 +415,14 @@ class Experiment:
         for item in self.shared_memory_items:
             smm.find_variable(*item)
 
-        # initialize the memory
-        memory = Memory()
+        # Calculate activation threshold - needed to throw out data in CIIL
+        sgt_memory = self.offdh_to_memory()
+        nm_mask = torch.all(sgt_memory.experience_targets == 0, axis=1)
+        nm_features = sgt_memory.experience_data[nm_mask]
+        activation_threshold = float(torch.mean(nm_features) + 0.8 * torch.std(nm_features))
 
+        memory = Memory()   # initialize memory just for adaptation data
         start_time = time.perf_counter()
-
         num_written = 0
         total_samples_unfound = 0
         last_timestamp = 0.
@@ -441,7 +444,7 @@ class Experiment:
                     continue
                 last_timestamp = timestamp
                 
-                result = make_pseudo_labels(environment_data, smm, approach=self.config.model)
+                result = make_pseudo_labels(environment_data, smm, approach=self.config.model, activation_threshold=activation_threshold)
                 if result is None:
                     total_samples_unfound += 1
                     continue

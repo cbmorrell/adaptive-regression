@@ -15,6 +15,7 @@ ADAPTATION_TIME = 250   # seconds
 VALIDATION_TIME = 300   # seconds
 TARGET_RADIUS = 40  # pixels
 ISOFITTS_RADIUS = 275   # pixels
+CURSOR_RADIUS = 7   # pixels
 TIMEOUT = 30
 
 
@@ -30,6 +31,7 @@ class AdaptationFitts(libemg.environments.fitts.ISOFitts):
             width=1500,
             height=750,
             target_radius=TARGET_RADIUS,
+            cursor_radius=CURSOR_RADIUS,
             game_time=game_time,
             mapping=mapping,
             timeout=TIMEOUT
@@ -179,21 +181,12 @@ def distance_to_proportional_control(distance):
     return min(1, result)   # bound result to 1
 
 
-def assign_ciil_label(prediction, optimal_direction, outcomes):
+def assign_ciil_label(prediction, optimal_direction, outcomes, is_below_threshold):
     positive_mask = outcomes == 'P'
     num_positive_components = positive_mask.sum()
-    # deadband_threshold = 0.1
-    # below_threshold = np.linalg.norm(prediction) <= deadband_threshold
-    # outside_expected_range = distance_to_proportional_control(optimal_direction) > deadband_threshold
-    buffer = 1.5 * TARGET_RADIUS
-    outside_expected_range = np.linalg.norm(optimal_direction) > buffer
-    below_threshold = np.linalg.norm(prediction) < distance_to_proportional_control(buffer)
-    # print(below_threshold, outside_expected_range, distance_to_proportional_control(buffer), buffer)
 
-    # TODO: modify so it's based on EMG activity, not the prediction (similar to active threshold with classification but use SGT NM data)
-    # TODO: Another question: should we be doing a deadband for the SGT models or no?
-    if num_positive_components == 0 or (below_threshold and outside_expected_range):
-        # Wrong quadrant or no motion when far from target - ignore this
+    if num_positive_components == 0 or is_below_threshold:
+        # Wrong quadrant or no motion when outside target - ignore this
         adaptation_labels = None
     elif num_positive_components == 2:
         # Correct quadrant - point prediction to optimal direction (later normalized to correct magnitude)
@@ -209,7 +202,7 @@ def assign_ciil_label(prediction, optimal_direction, outcomes):
     return adaptation_labels
 
 
-def make_pseudo_labels(environment_data, smm, approach):
+def make_pseudo_labels(environment_data, smm, approach, activation_threshold):
     timestamp = environment_data[0]
     optimal_direction = environment_data[1:]
 
@@ -219,13 +212,14 @@ def make_pseudo_labels(environment_data, smm, approach):
     features = np.array(feature_data[feature_data_index,1:].squeeze())
     if len(feature_data_index[0]) == 0:
         return None
+    is_below_threshold = np.mean(features) < activation_threshold
     
     # find the predictions info: 
     prediction_data = smm.get_variable("model_output")
     prediction_data_index = np.where(prediction_data[:,0] == timestamp)[0]
     prediction = prediction_data[prediction_data_index, 1:].squeeze()
 
-    if np.linalg.norm(optimal_direction) < TARGET_RADIUS:
+    if np.linalg.norm(optimal_direction) < (TARGET_RADIUS + CURSOR_RADIUS):
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
@@ -235,10 +229,6 @@ def make_pseudo_labels(environment_data, smm, approach):
         # We could probably do something else naive and say that the user is comfortable giving half the radius as a buffer, but that's kind of random.
         
     else:
-        # outcomes = np.array(['P' if np.sign(prediction_component) == np.sign(direction_component) and np.abs(direction_component) > TARGET_RADIUS else 'N'
-        #                      for prediction_component, direction_component in zip(prediction, optimal_direction)])
-        # outcomes = np.array(['P' if np.sign(x) == np.sign(y) else 'N' for x, y in zip(prediction, optimal_direction)])
-
         outcomes = []
         for prediction_component, direction_component in zip(prediction, optimal_direction):
             correct_direction = np.sign(prediction_component) == np.sign(direction_component)
@@ -247,7 +237,7 @@ def make_pseudo_labels(environment_data, smm, approach):
             outcomes.append(outcome)
         outcomes = np.array(outcomes)
         if approach == 'ciil':
-            adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes)
+            adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes, is_below_threshold)
         elif approach == 'oracle':
             adaptation_labels = np.copy(optimal_direction)
         else:
