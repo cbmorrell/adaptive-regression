@@ -187,10 +187,11 @@ class Plotter:
             axs[0, 1].set_axis_off()    # hide unused axis
 
             # Plot
-            value_range = np.array([[-1, 1], [-1, 1]])
+            # nm_mask = np.all(np.abs(model_predictions) < bins[bins.shape[0] // 2], axis=1)
+            # model_predictions = model_predictions[~nm_mask]
             x_predictions = model_predictions[:, 0]
             y_predictions = model_predictions[:, 1]
-            x_y_counts, _, _ = np.histogram2d(x_predictions, y_predictions, bins=bins, density=True)
+            x_y_counts, _, _ = np.histogram2d(x_predictions, y_predictions, bins=bins, density=False)   # density sets it to return pdf, not % occurrences
             x_hist_ax.hist(x_predictions, bins=bins)
             y_hist_ax.hist(y_predictions, bins=bins, orientation='horizontal')
             heatmap = sns.heatmap(x_y_counts, ax=heatmap_ax, cmap=sns.light_palette('seagreen', as_cmap=True), norm=mpl.colors.LogNorm())
@@ -198,17 +199,16 @@ class Plotter:
             # Formatting
             colorbar = heatmap.collections[0].colorbar
             colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
-            colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=1))
+            colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
             heatmap_ax.set_xticks(ticks, bins, rotation=90)
             heatmap_ax.set_yticks(ticks, bins, rotation=0)
             heatmap_ax.set_xlabel('Open / Close Activation')
+            heatmap_ax.set_ylabel('Pro / Supination Activation')
             x_hist_ax.set_xticks(bins, bins, rotation=90)
             y_hist_ax.set_yticks(bins, bins, rotation=0)
             x_hist_ax.set_title(format_names(model))
             x_hist_ax.set_ylabel('Frequency')
             y_hist_ax.set_xlabel('Frequency')
-            if model == self.models[0]:
-                heatmap_ax.set_ylabel('Pro / Supination Activation')
         
         return fig
 
