@@ -40,7 +40,7 @@ class Plotter:
         self.results_path.mkdir(parents=True, exist_ok=True)
 
     def read_log(self, participant_id, model):
-        participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix()]
+        participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
         assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id} {model}, but got {participant_files}."
         participant = Participant.load(participant_files[0])
         config = make_config(participant, model)
