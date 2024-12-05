@@ -13,18 +13,26 @@ WROTE = 1
 DONE_TASK = -10
 ADAPTATION_TIME = 250   # seconds
 VALIDATION_TIME = 300   # seconds
+# NUM_VALIDATION_TRIALS = 50
 TARGET_RADIUS = 40  # pixels
 ISOFITTS_RADIUS = 275   # pixels
 CURSOR_RADIUS = 7   # pixels
-TIMEOUT = 30
+TIMEOUT = 10
 
 
 class AdaptationFitts(libemg.environments.fitts.ISOFitts):
     def __init__(self, shared_memory_items, save_file: str, adapt: bool, mapping: str):
         controller = libemg.environments.controllers.RegressorController()
+        # if adapt:
+        #     game_time = ADAPTATION_TIME
+        #     num_trials = 2000    # set to high number so task stops based on time instead of trials
+        # else:
+        #     game_time = None
+        #     num_trials = NUM_VALIDATION_TRIALS
         game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
+        num_trials = 2000
         config = libemg.environments.fitts.FittsConfig(
-            num_trials=2000,    # set to high number so task stops based on time instead of trials
+            num_trials=num_trials,
             dwell_time=2.0,
             save_file=save_file,
             fps=60,
