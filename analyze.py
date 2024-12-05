@@ -86,9 +86,9 @@ class Plotter:
         time_axs = subfigs[1].subplots(nrows=3, ncols=len(self.models), sharex=True)
         lines = []
         bar_labels = []
-        mean_throughputs = []
-        mean_efficiencies = []
-        mean_overshoots = []
+        subject_throughputs = []
+        subject_efficiencies = []
+        subject_overshoots = []
         zorder = 2  # zorder=2 so points are plotted on top of bar plot
         for model_idx, model in enumerate(self.models):
             model_throughputs = []
@@ -121,15 +121,15 @@ class Plotter:
                 plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
 
 
-            mean_throughputs.append(np.mean(model_throughputs))
-            mean_efficiencies.append(np.mean(model_efficiencies))
-            mean_overshoots.append(np.mean(model_overshoots))
+            subject_throughputs.append(np.mean(model_throughputs))
+            subject_efficiencies.append(np.mean(model_efficiencies))
+            subject_overshoots.append(np.mean(model_overshoots))
 
         handles = get_unique_legend_handles(lines)
         bar_color = 'black'
-        bar_axs[0].bar(bar_labels, mean_throughputs, color=bar_color)
-        bar_axs[1].bar(bar_labels, mean_efficiencies, color=bar_color)
-        bar_axs[2].bar(bar_labels, mean_overshoots, color=bar_color)
+        bar_axs[0].bar(bar_labels, subject_throughputs, color=bar_color)
+        bar_axs[1].bar(bar_labels, subject_efficiencies, color=bar_color)
+        bar_axs[2].bar(bar_labels, subject_overshoots, color=bar_color)
         bar_axs[0].set_ylabel('Throughput')
         bar_axs[1].set_ylabel('Path Efficiency')
         bar_axs[2].set_ylabel('Overshoots')
