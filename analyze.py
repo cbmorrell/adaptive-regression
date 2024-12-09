@@ -23,7 +23,7 @@ class Plotter:
         self.stage = stage
         self.plot_adaptation = self.stage == 'adaptation'
         if self.plot_adaptation:
-            self.models = ADAPTIVE_MODELS
+            self.models = (ADAPTIVE_MODELS[1], ADAPTIVE_MODELS[0])  # reorder based on best visual for plots (oracle, ciil)
         else:
             self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
 
