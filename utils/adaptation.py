@@ -23,16 +23,9 @@ DWELL_TIME = 2.0    # seconds
 class AdaptationFitts(libemg.environments.fitts.ISOFitts):
     def __init__(self, shared_memory_items, save_file: str, adapt: bool, mapping: str):
         controller = libemg.environments.controllers.RegressorController()
-        # if adapt:
-        #     game_time = ADAPTATION_TIME
-        #     num_trials = 2000    # set to high number so task stops based on time instead of trials
-        # else:
-        #     game_time = None
-        #     num_trials = NUM_VALIDATION_TRIALS
         game_time = ADAPTATION_TIME if adapt else VALIDATION_TIME
-        num_trials = 2000
         config = libemg.environments.fitts.FittsConfig(
-            num_trials=num_trials,
+            num_trials=2000,    # set to high number so task stops based on time instead of trials
             dwell_time=DWELL_TIME,
             save_file=save_file,
             fps=60,
