@@ -219,7 +219,7 @@ class Plotter:
     def plot(self, plot_type):
         if plot_type == 'fitts-metrics':
             fig = self._plot_fitts_metrics()
-        elif plot_type == 'fitts-metrics-time':
+        elif plot_type == 'fitts-metrics-over-time':
             fig = self._plot_fitts_metrics_over_time()
         elif plot_type == 'fitts-traces':
             fig = self._plot_fitts_traces()
@@ -419,7 +419,7 @@ def main():
 
     plotter = Plotter(participants, args.analysis, stage=args.stage)
     plotter.plot('fitts-metrics')
-    plotter.plot('fitts-metrics-time')
+    plotter.plot('fitts-metrics-over-time')
     plotter.plot('fitts-traces')
     plotter.plot('heatmap')
     
