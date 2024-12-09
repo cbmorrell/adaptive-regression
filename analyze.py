@@ -10,7 +10,7 @@ import matplotlib as mpl
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
-from utils.adaptation import TIMEOUT
+from utils.adaptation import TIMEOUT, DWELL_TIME
 from experiment import MODELS, Participant, make_config
 
 
@@ -25,7 +25,6 @@ class Plotter:
         if self.plot_adaptation:
             self.models = self.models[-2:]  # only take adaptive models
 
-        # self.models = ['old', 'ciil', 'new-again']
         if self.analysis == 'within':
             self.exclude_within_dof_trials = False
             self.exclude_combined_dof_trials = True
@@ -50,22 +49,14 @@ class Plotter:
         else:
             fitts_file = config.validation_fitts_file
 
-        # if model == self.models[0]:
-        #     fitts_file = '/Users/cmorrell/Code/adaptive-regression/data/subject-099/old/adaptation_fitts.pkl'
-        # elif model == self.models[-1]:
-        #     fitts_file = '/Users/cmorrell/Code/adaptive-regression/data/subject-099/new-again/validation_fitts.pkl'
-        
         run_log = read_pickle_file(fitts_file)
         analyzer = LogAnalyzer(run_log)
 
         filter_mask = []
         for t in analyzer.trials:
             trial_mask = analyzer.get_trial_mask(t)
-            is_timeout_trial, is_unfinished_trial, is_within_dof_trial = analyzer.get_trial_flags(trial_mask)
-            if participant_id == 'subject-002' and model == 'within-sgt' and t == 0:
-                # Handling edge case for first trial being a timeout
-                is_unfinished_trial = False
-                is_timeout_trial = True
+            is_timeout_trial, is_within_dof_trial = analyzer.get_trial_flags(trial_mask)
+            is_unfinished_trial = t == analyzer.trials[-1]  # ignore final trial b/c it is unfinished
 
             if (is_timeout_trial and self.exclude_timeout_trials) or (is_within_dof_trial and self.exclude_within_dof_trials) or (not is_within_dof_trial 
                 and self.exclude_combined_dof_trials) or is_unfinished_trial:
@@ -246,7 +237,6 @@ class Plotter:
 
 class LogAnalyzer:
     def __init__(self, run_log):
-        # TODO: Subtract dwell time from throughput
         # TODO: Add # targets acquired as an outcome metric
         # TODO: Keep track of subjective notes for each model (used in discussion)
         self.run_log = run_log
@@ -263,12 +253,11 @@ class LogAnalyzer:
         final_cursor = self.cursor_positions[trial_mask[-1]]
         target = self.targets[trial_mask[-1]]
         trial_time = self.timestamps[trial_mask[-1]] - self.timestamps[trial_mask[0]]
-        exceeds_timeout = round(trial_time, 1) >= TIMEOUT # account for rounding...
+        exceeds_timeout = trial_time >= (TIMEOUT * 0.98)    # account for rounding errors
         cursor_in_target = self.in_target(final_cursor, target)
         is_timeout_trial = exceeds_timeout and not cursor_in_target
-        is_unfinished_trial = (not exceeds_timeout and not cursor_in_target) or len(trial_mask) <= 1
         is_within_dof_trial = np.any(np.abs(np.array(target[:2]) - np.array(initial_cursor_location)) <= target[2] // 2)
-        return is_timeout_trial, is_unfinished_trial, is_within_dof_trial
+        return is_timeout_trial, is_within_dof_trial
 
     @staticmethod
     def in_target(cursor, target):
@@ -280,7 +269,7 @@ class LogAnalyzer:
         return fastest_path / distance_travelled
 
     def calculate_throughput(self, trial_mask):
-        trial_time = self.timestamps[trial_mask[-1]] - self.timestamps[trial_mask[0]]
+        trial_time = (self.timestamps[trial_mask[-1]] - self.timestamps[trial_mask[0]]) - DWELL_TIME
         starting_cursor_position = (self.cursor_positions[trial_mask[0]])[0:2]
         target = self.targets[trial_mask[0]]
         target_position = target[:2]
@@ -325,22 +314,10 @@ class LogAnalyzer:
         
         for t in self.trials:
             trial_mask = self.get_trial_mask(t)
-            # if t == trials[-1]:
-            #     # Skip the last trial for now - the pilot data is_uninfinished_trial doesn't work b/c of an edge case where timer starts before first timestamp so trial time isn't larger than timeout.
-            #     # This isn't needed if we change validation to be X trials always.
-            #     # TODO: When we're not looking at pilot data we should change this.
-            #     print(f"Skipping {t}")
-            #     continue
-            # is_timeout_trial, is_unfinished_trial = get_trial_flags(self.run_log, trial_mask)
+            is_timeout_trial, _ = self.get_trial_flags(trial_mask)
 
-            # if is_unfinished_trial:
-            #     # Skip trials
-            #     print(f"Skipping {t}")
-            #     continue
-
-            # if is_timeout_trial:
-            #     fitts_results['timeouts'].append(t)
-
+            if is_timeout_trial:
+                fitts_results['timeouts'].append(t)
             fitts_results['throughput'].append(self.calculate_throughput(trial_mask))
             fitts_results['overshoots'].append(self.calculate_overshoots(trial_mask))
             fitts_results['efficiency'].append(self.calculate_efficiency(trial_mask))
