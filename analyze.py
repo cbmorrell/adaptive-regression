@@ -313,8 +313,8 @@ class Trial:
 
         initial_cursor = np.array(self.cursor_positions[0])
         target = np.array(self.targets[-1])
-        trial_time = self.timestamps[-1] - self.timestamps[0]
-        self.is_timeout_trial = trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
+        self.trial_time = self.timestamps[-1] - self.timestamps[0]
+        self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
         self.is_within_dof_trial = np.any(np.abs(target[:2] - initial_cursor[:2]) <= (target[2] // 2 + initial_cursor[2] // 2))
 
     @staticmethod
@@ -327,7 +327,10 @@ class Trial:
         return fastest_path / distance_travelled
 
     def calculate_throughput(self):
-        trial_time = (self.timestamps[-1] - self.timestamps[0]) - DWELL_TIME
+        trial_time = self.trial_time
+        if not self.is_timeout_trial:
+            # Only subtract dwell time for successful trials
+            trial_time -= DWELL_TIME
         starting_cursor_position = (self.cursor_positions[0])[0:2]
         target = self.targets[0]
         target_position = target[:2]
