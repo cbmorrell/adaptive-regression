@@ -13,11 +13,11 @@ WROTE = 1
 DONE_TASK = -10
 ADAPTATION_TIME = 250   # seconds
 VALIDATION_TIME = 300   # seconds
-# NUM_VALIDATION_TRIALS = 50
 TARGET_RADIUS = 40  # pixels
 ISOFITTS_RADIUS = 275   # pixels
 CURSOR_RADIUS = 7   # pixels
-TIMEOUT = 10
+TIMEOUT = 10    # seconds
+DWELL_TIME = 2.0    # seconds
 
 
 class AdaptationFitts(libemg.environments.fitts.ISOFitts):
@@ -33,7 +33,7 @@ class AdaptationFitts(libemg.environments.fitts.ISOFitts):
         num_trials = 2000
         config = libemg.environments.fitts.FittsConfig(
             num_trials=num_trials,
-            dwell_time=2.0,
+            dwell_time=DWELL_TIME,
             save_file=save_file,
             fps=60,
             width=1500,
