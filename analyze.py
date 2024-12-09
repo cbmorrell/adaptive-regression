@@ -25,6 +25,7 @@ class Plotter:
         if self.plot_adaptation:
             self.models = self.models[-2:]  # only take adaptive models
 
+        # self.models = ['old', 'ciil', 'new-again']
         if self.analysis == 'within':
             self.exclude_within_dof_trials = False
             self.exclude_combined_dof_trials = True
@@ -49,6 +50,11 @@ class Plotter:
         else:
             fitts_file = config.validation_fitts_file
 
+        # if model == self.models[0]:
+        #     fitts_file = '/Users/cmorrell/Code/adaptive-regression/data/subject-099/old/adaptation_fitts.pkl'
+        # elif model == self.models[-1]:
+        #     fitts_file = '/Users/cmorrell/Code/adaptive-regression/data/subject-099/new-again/validation_fitts.pkl'
+        
         run_log = read_pickle_file(fitts_file)
 
         filter_mask = []
@@ -98,9 +104,9 @@ class Plotter:
             for participant_idx, participant in enumerate(self.participants):
                 run_log = self.read_log(participant, model)
                 fitts_metrics = extract_fitts_metrics(run_log)
-                model_throughputs.append(fitts_metrics['throughput'])   # need to grab metrics over time here
-                model_efficiencies.append(fitts_metrics['efficiency'])
-                model_overshoots.append(fitts_metrics['overshoots'])
+                model_throughputs.append(np.mean(fitts_metrics['throughput']))
+                model_efficiencies.append(np.mean(fitts_metrics['efficiency']))
+                model_overshoots.append(np.sum(fitts_metrics['overshoots']))
 
                 # Bar plot
                 color = cmap(participant_idx)
@@ -116,9 +122,9 @@ class Plotter:
                 # Plot over time
                 time_axs[0, model_idx].set_title(bar_labels[-1])
                 time_axs[2, model_idx].set_xlabel('Trial #')
-                plot_metric_over_time(fitts_metrics['throughput_over_time'], time_axs[0, model_idx], color)
-                plot_metric_over_time(fitts_metrics['efficiency_over_time'], time_axs[1, model_idx], color)
-                plot_metric_over_time(fitts_metrics['overshoots_over_time'], time_axs[2, model_idx], color)
+                plot_metric_over_time(fitts_metrics['throughput'], time_axs[0, model_idx], color)
+                plot_metric_over_time(fitts_metrics['efficiency'], time_axs[1, model_idx], color)
+                plot_metric_over_time(fitts_metrics['overshoots'], time_axs[2, model_idx], color)
 
 
             subject_throughputs.append(np.mean(model_throughputs))
@@ -209,6 +215,8 @@ class Plotter:
             x_hist_ax.set_title(format_names(model))
             x_hist_ax.set_ylabel('Frequency')
             y_hist_ax.set_xlabel('Frequency')
+
+            # TODO: Maybe annotate with simultaneity metric
         
         return fig
 
@@ -373,15 +381,15 @@ def extract_fitts_metrics(run_log):
         fitts_results['overshoots'].append(calculate_overshoots(run_log, trial_mask))
         fitts_results['efficiency'].append(calculate_efficiency(run_log, trial_mask))
         
-    summary_metrics = {}
-    summary_metrics['throughput_over_time'] = fitts_results['throughput']
-    summary_metrics['efficiency_over_time'] = fitts_results['efficiency']
-    summary_metrics['overshoots_over_time'] = fitts_results['overshoots']
-    summary_metrics['timeouts'] = fitts_results['timeouts']
-    summary_metrics['overshoots'] = np.sum(fitts_results['overshoots'])
-    summary_metrics['efficiency'] = np.mean(fitts_results['efficiency'])
-    summary_metrics['throughput'] = np.mean(fitts_results['throughput'])
-    return summary_metrics
+    # summary_metrics = {}
+    # summary_metrics['throughput_over_time'] = fitts_results['throughput']
+    # summary_metrics['efficiency_over_time'] = fitts_results['efficiency']
+    # summary_metrics['overshoots_over_time'] = fitts_results['overshoots']
+    # summary_metrics['timeouts'] = fitts_results['timeouts']
+    # summary_metrics['overshoots'] = np.sum(fitts_results['overshoots'])
+    # summary_metrics['efficiency'] = np.mean(fitts_results['efficiency'])
+    # summary_metrics['throughput'] = np.mean(fitts_results['throughput'])
+    return fitts_results
 
 
 def plot_pilot_distance_vs_proportional_control():
@@ -421,9 +429,8 @@ def main():
     plotter.plot('fitts-traces')
     plotter.plot('heatmap')
     
-    # TODO: Look at simultaneity, action interference, and usability metrics over time
     plt.show()
-    print('-------------Analyze complete!-------------')
+    print('-------------Analysis complete!-------------')
 
 
 if __name__ == '__main__':
