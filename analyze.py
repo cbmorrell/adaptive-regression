@@ -56,11 +56,12 @@ class Plotter:
         #     fitts_file = '/Users/cmorrell/Code/adaptive-regression/data/subject-099/new-again/validation_fitts.pkl'
         
         run_log = read_pickle_file(fitts_file)
+        analyzer = LogAnalyzer(run_log)
 
         filter_mask = []
-        for t in np.unique(run_log['trial_number']):
-            trial_mask = np.where(run_log['trial_number'] == t)[0]
-            is_timeout_trial, is_unfinished_trial, is_within_dof_trial = get_trial_flags(run_log, trial_mask)
+        for t in analyzer.trials:
+            trial_mask = analyzer.get_trial_mask(t)
+            is_timeout_trial, is_unfinished_trial, is_within_dof_trial = analyzer.get_trial_flags(trial_mask)
             if participant_id == 'subject-002' and model == 'within-sgt' and t == 0:
                 # Handling edge case for first trial being a timeout
                 is_unfinished_trial = False
@@ -103,7 +104,8 @@ class Plotter:
             bar_labels.append(format_names(model))
             for participant_idx, participant in enumerate(self.participants):
                 run_log = self.read_log(participant, model)
-                fitts_metrics = extract_fitts_metrics(run_log)
+                analyzer = LogAnalyzer(run_log)
+                fitts_metrics = analyzer.extract_fitts_metrics()
                 model_throughputs.append(np.mean(fitts_metrics['throughput']))
                 model_efficiencies.append(np.mean(fitts_metrics['efficiency']))
                 model_overshoots.append(np.sum(fitts_metrics['overshoots']))
@@ -153,7 +155,7 @@ class Plotter:
         for model, ax in zip(self.models, axs):
             for participant_idx, participant in enumerate(self.participants):
                 run_log = self.read_log(participant, model)
-                traces = extract_traces(run_log)
+                traces = LogAnalyzer(run_log).extract_traces()
                 for trace in traces:
                     lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
                 
@@ -179,7 +181,7 @@ class Plotter:
             model_predictions = []
             for participant in self.participants:
                 run_log = self.read_log(participant, model)
-                predictions = extract_model_predictions(run_log)
+                predictions = LogAnalyzer(run_log).extract_model_predictions()
                 predictions = np.concatenate(predictions)
                 model_predictions.append(predictions)
             model_predictions = np.concatenate(model_predictions)
@@ -242,6 +244,110 @@ class Plotter:
         print(f"File saved to {filepath.as_posix()}.")
 
 
+class LogAnalyzer:
+    def __init__(self, run_log):
+        # TODO: Subtract dwell time from throughput
+        # TODO: Add # targets acquired as an outcome metric
+        # TODO: Keep track of subjective notes for each model (used in discussion)
+        self.run_log = run_log
+        self.cursor_positions = self.run_log['cursor_position']
+        self.targets = self.run_log['goal_target']
+        self.timestamps = self.run_log['global_clock']
+        self.trials = np.unique(self.run_log['trial_number'])
+
+    def get_trial_mask(self, trial):
+        return np.where(self.run_log['trial_number'] == trial)[0]
+
+    def get_trial_flags(self, trial_mask):
+        initial_cursor_location = self.cursor_positions[trial_mask[0]][:2]
+        final_cursor = self.cursor_positions[trial_mask[-1]]
+        target = self.targets[trial_mask[-1]]
+        trial_time = self.timestamps[trial_mask[-1]] - self.timestamps[trial_mask[0]]
+        exceeds_timeout = round(trial_time, 1) >= TIMEOUT # account for rounding...
+        cursor_in_target = self.in_target(final_cursor, target)
+        is_timeout_trial = exceeds_timeout and not cursor_in_target
+        is_unfinished_trial = (not exceeds_timeout and not cursor_in_target) or len(trial_mask) <= 1
+        is_within_dof_trial = np.any(np.abs(np.array(target[:2]) - np.array(initial_cursor_location)) <= target[2] // 2)
+        return is_timeout_trial, is_unfinished_trial, is_within_dof_trial
+
+    @staticmethod
+    def in_target(cursor, target):
+        return math.dist(cursor[:2], target[:2]) < (target[2]/2 + cursor[2]/2)
+
+    def calculate_efficiency(self, trial_mask):
+        distance_travelled = np.sum([math.dist(self.cursor_positions[trial_mask[i]][0:2], self.cursor_positions[trial_mask[i-1]][0:2]) for i in range(1,len(trial_mask))])
+        fastest_path = math.dist((self.cursor_positions[trial_mask[0]])[0:2], (self.targets[trial_mask[0]])[0:2])
+        return fastest_path / distance_travelled
+
+    def calculate_throughput(self, trial_mask):
+        trial_time = self.timestamps[trial_mask[-1]] - self.timestamps[trial_mask[0]]
+        starting_cursor_position = (self.cursor_positions[trial_mask[0]])[0:2]
+        target = self.targets[trial_mask[0]]
+        target_position = target[:2]
+        target_width = target[-1]
+        distance = math.dist(starting_cursor_position, target_position)
+        id = math.log2(distance / target_width + 1)
+        return id / trial_time
+
+    def calculate_overshoots(self, trial_mask):
+        cursor_locs = np.array(self.cursor_positions)[trial_mask]
+        targets = np.array(self.targets)[trial_mask]
+        in_bounds = [self.in_target(cursor_locs[i], targets[i]) for i in range(0,len(cursor_locs))]
+        overshoots = 0
+        for i in range(1,len(in_bounds)):
+            if in_bounds[i-1] == True and in_bounds[i] == False:
+                overshoots += 1 
+        return overshoots
+
+    def extract_traces(self):
+        traces = []
+        for t in self.trials:
+            trial_mask = np.where(self.run_log['trial_number'] == t)[0]
+            traces.append(np.array(self.cursor_positions)[trial_mask][:, :2])
+        return traces
+
+    def extract_model_predictions(self):
+        predictions = []
+        for t in self.trials:
+            trial_mask = np.where(self.run_log['trial_number'] == t)[0]
+            model_outputs = np.array(self.run_log['class_label'])[trial_mask]
+            model_outputs = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_outputs]
+            predictions.append(model_outputs)
+        return predictions
+
+    def extract_fitts_metrics(self):
+        fitts_results = {
+            'timeouts': [],
+            'overshoots': [],
+            'efficiency': [],
+            'throughput': []
+        }
+        
+        for t in self.trials:
+            trial_mask = self.get_trial_mask(t)
+            # if t == trials[-1]:
+            #     # Skip the last trial for now - the pilot data is_uninfinished_trial doesn't work b/c of an edge case where timer starts before first timestamp so trial time isn't larger than timeout.
+            #     # This isn't needed if we change validation to be X trials always.
+            #     # TODO: When we're not looking at pilot data we should change this.
+            #     print(f"Skipping {t}")
+            #     continue
+            # is_timeout_trial, is_unfinished_trial = get_trial_flags(self.run_log, trial_mask)
+
+            # if is_unfinished_trial:
+            #     # Skip trials
+            #     print(f"Skipping {t}")
+            #     continue
+
+            # if is_timeout_trial:
+            #     fitts_results['timeouts'].append(t)
+
+            fitts_results['throughput'].append(self.calculate_throughput(trial_mask))
+            fitts_results['overshoots'].append(self.calculate_overshoots(trial_mask))
+            fitts_results['efficiency'].append(self.calculate_efficiency(trial_mask))
+            
+        return fitts_results
+
+
 def read_pickle_file(filename):
     with open(filename, 'rb') as f:
         file_data = pickle.load(f)
@@ -272,9 +378,9 @@ def format_names(models):
             ('Ciil', 'CIIL'),
             ('Within', 'W'),
             ('Combined', 'C'),
-            ('Subject-', 'S')
+            ('Subject ', 'S')
         )
-        formatted_name = name.title()
+        formatted_name = name.replace('-', ' ').title()
         for replacement in replacements:
             formatted_name = formatted_name.replace(replacement[0], replacement[1])
         return formatted_name
@@ -283,113 +389,6 @@ def format_names(models):
         return format_name(models)
 
     return [format_name(model) for model in models]
-
-
-def get_trial_flags(run_log, trial_mask):
-    initial_cursor_location = run_log['cursor_position'][trial_mask[0]][:2]
-    final_cursor = run_log['cursor_position'][trial_mask[-1]]
-    target = run_log['goal_target'][trial_mask[-1]]
-    trial_time = run_log['global_clock'][trial_mask[-1]] - run_log['global_clock'][trial_mask[0]]
-    exceeds_timeout = round(trial_time, 1) >= TIMEOUT # account for rounding...
-    cursor_in_target = in_target(final_cursor, target)
-    is_timeout_trial = exceeds_timeout and not cursor_in_target
-    is_unfinished_trial = (not exceeds_timeout and not cursor_in_target) or len(trial_mask) <= 1
-    is_within_dof_trial = np.any(np.abs(np.array(target[:2]) - np.array(initial_cursor_location)) <= target[2] // 2)
-    return is_timeout_trial, is_unfinished_trial, is_within_dof_trial
-
-
-def in_target(cursor, target):
-    return math.dist(cursor[:2], target[:2]) < (target[2]/2 + cursor[2]/2)
-
-
-def calculate_efficiency(run_log, trial_mask):
-    distance_travelled = np.sum([math.dist(run_log['cursor_position'][trial_mask[i]][0:2], run_log['cursor_position'][trial_mask[i-1]][0:2]) for i in range(1,len(trial_mask))])
-    fastest_path = math.dist((run_log['cursor_position'][trial_mask[0]])[0:2], (run_log['goal_target'][trial_mask[0]])[0:2])
-    return fastest_path / distance_travelled
-
-
-def calculate_throughput(run_log, trial_mask):
-    trial_time = run_log['global_clock'][trial_mask[-1]] - run_log['global_clock'][trial_mask[0]]
-    starting_cursor_position = (run_log['cursor_position'][trial_mask[0]])[0:2]
-    target = run_log['goal_target'][trial_mask[0]]
-    target_position = target[:2]
-    target_width = target[-1]
-    distance = math.dist(starting_cursor_position, target_position)
-    id = math.log2(distance / target_width + 1)
-    return id / trial_time
-
-
-def calculate_overshoots(run_log, trial_mask):
-    cursor_locs = np.array(run_log['cursor_position'])[trial_mask]
-    targets = np.array(run_log['goal_target'])[trial_mask]
-    in_bounds = [in_target(cursor_locs[i], targets[i]) for i in range(0,len(cursor_locs))]
-    overshoots = 0
-    for i in range(1,len(in_bounds)):
-        if in_bounds[i-1] == True and in_bounds[i] == False:
-            overshoots += 1 
-    return overshoots
-
-
-def extract_traces(run_log):
-    trials = np.unique(run_log['trial_number'])
-    traces = []
-    for t in trials:
-        trial_mask = np.where(run_log['trial_number'] == t)[0]
-        traces.append(np.array(run_log['cursor_position'])[trial_mask][:, :2])
-    return traces
-
-
-def extract_model_predictions(run_log):
-    trials = np.unique(run_log['trial_number'])
-    predictions = []
-    for t in trials:
-        trial_mask = np.where(run_log['trial_number'] == t)[0]
-        model_outputs = np.array(run_log['class_label'])[trial_mask]
-        model_outputs = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_outputs]
-        predictions.append(model_outputs)
-    return predictions
-
-
-def extract_fitts_metrics(run_log):
-    fitts_results = {
-        'timeouts': [],
-        'overshoots': [],
-        'efficiency': [],
-        'throughput': []
-    }
-    
-    trials = np.unique(run_log['trial_number'])
-    for t in trials:
-        trial_mask = np.where(run_log['trial_number'] == t)[0]
-        # if t == trials[-1]:
-        #     # Skip the last trial for now - the pilot data is_uninfinished_trial doesn't work b/c of an edge case where timer starts before first timestamp so trial time isn't larger than timeout.
-        #     # This isn't needed if we change validation to be X trials always.
-        #     # TODO: When we're not looking at pilot data we should change this.
-        #     print(f"Skipping {t}")
-        #     continue
-        # is_timeout_trial, is_unfinished_trial = get_trial_flags(run_log, trial_mask)
-
-        # if is_unfinished_trial:
-        #     # Skip trials
-        #     print(f"Skipping {t}")
-        #     continue
-
-        # if is_timeout_trial:
-        #     fitts_results['timeouts'].append(t)
-
-        fitts_results['throughput'].append(calculate_throughput(run_log, trial_mask))
-        fitts_results['overshoots'].append(calculate_overshoots(run_log, trial_mask))
-        fitts_results['efficiency'].append(calculate_efficiency(run_log, trial_mask))
-        
-    # summary_metrics = {}
-    # summary_metrics['throughput_over_time'] = fitts_results['throughput']
-    # summary_metrics['efficiency_over_time'] = fitts_results['efficiency']
-    # summary_metrics['overshoots_over_time'] = fitts_results['overshoots']
-    # summary_metrics['timeouts'] = fitts_results['timeouts']
-    # summary_metrics['overshoots'] = np.sum(fitts_results['overshoots'])
-    # summary_metrics['efficiency'] = np.mean(fitts_results['efficiency'])
-    # summary_metrics['throughput'] = np.mean(fitts_results['throughput'])
-    return fitts_results
 
 
 def plot_pilot_distance_vs_proportional_control():
