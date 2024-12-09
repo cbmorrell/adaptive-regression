@@ -46,8 +46,6 @@ def main():
     else:
         experiment.run_isofitts(online_data_handler)
 
-    # TODO: Erik also mentioned maybe prompting the user with the rotational fitts interface instead of the cartesian prompt... probably just prompt with bars instead?
-
     print('------------------Main script complete------------------')
 
 
