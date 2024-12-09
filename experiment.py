@@ -19,7 +19,7 @@ from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labe
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
-MODELS = ('ciil', 'combined-sgt', 'oracle', 'within-sgt')   # TODO: change the order of these based on desired presentation if we recollect pilots (will need to be consistent for entire study)
+MODELS = ('ciil', 'combined-sgt', 'oracle', 'within-sgt')
 
 
 @dataclass(frozen=True)
