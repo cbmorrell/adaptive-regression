@@ -41,28 +41,6 @@ class Plotter:
 
         return Log(fitts_file, self.analysis)
 
-        # run_log = read_pickle_file(fitts_file)
-        # analyzer = LogAnalyzer(run_log)
-
-        # filter_mask = []
-        # for t in analyzer.trials:
-        #     trial_mask = analyzer.get_trial_mask(t)
-        #     is_timeout_trial, is_within_dof_trial = analyzer.get_trial_flags(trial_mask)
-        #     is_unfinished_trial = t == analyzer.trials[-1]  # ignore final trial b/c it is unfinished
-
-        #     if (is_timeout_trial and self.exclude_timeout_trials) or (is_within_dof_trial and self.exclude_within_dof_trials) or (not is_within_dof_trial 
-        #         and self.exclude_combined_dof_trials) or is_unfinished_trial:
-        #         print(f"Skipping {participant_id} {model} trial {t}.")
-        #         continue
-
-        #     filter_mask.extend(trial_mask)
-            
-        # # Return run_log just with correct trials
-        # for key in run_log.keys():
-        #     run_log[key] = np.array(run_log[key])[filter_mask]
-
-        # return run_log
-    
     def _plot_fitts_metrics(self):
         def plot_metric_over_time(values, ax, color):
             values = moving_average(values)
@@ -266,16 +244,21 @@ class Log:
             'timeouts': [],
             'overshoots': [],
             'efficiency': [],
-            'throughput': []
+            'throughput': [],
+            'num_trials': -1,
+            'completion_rate': -1
         }
         
         for t in self.trials:
 
             if t.is_timeout_trial:
-                fitts_results['timeouts'].append(t)
+                fitts_results['timeouts'].append(t.trial_idx)
             fitts_results['throughput'].append(t.calculate_throughput())
             fitts_results['overshoots'].append(t.calculate_overshoots())
             fitts_results['efficiency'].append(t.calculate_efficiency())
+
+        fitts_results['num_trials'] = len(fitts_results['throughput'])
+        fitts_results['completion_rate'] = 1 - (len(fitts_results['timeouts']) / fitts_results['num_trials'])
             
         return fitts_results
 
