@@ -3,6 +3,7 @@ import math
 import pickle
 from argparse import ArgumentParser
 
+import pandas as pd
 import libemg
 import numpy as np
 import matplotlib.pyplot as plt
@@ -41,7 +42,7 @@ class Plotter:
 
         return Log(fitts_file, self.analysis)
 
-    def _plot_fitts_metrics(self):
+    def _plot_fitts_metrics_over_time(self):
         def plot_metric_over_time(values, ax, color):
             values = moving_average(values)
             ax.scatter(np.arange(len(values)), values, color=color, s=4)
@@ -106,6 +107,39 @@ class Plotter:
         if len(self.participants) != 1:
             time_axs[-1, -1].legend(handles.values(), format_names(handles.keys()), ncols=2)
 
+        return fig
+
+    def _plot_fitts_metrics(self):
+        fig, axs = plt.subplots(nrows=1, ncols=5, layout='constrained', figsize=(14, 6))
+        model_labels = []
+        throughputs = []
+        efficiencies = []
+        overshoots = []
+        num_trials = []
+        completion_rates = []
+        for model in self.models:
+            for participant in self.participants:
+                log = self.read_log(participant, model)
+                model_labels.append(format_names(model))
+                fitts_metrics = log.extract_fitts_metrics()
+                throughputs.append(np.mean(fitts_metrics['throughput']))
+                efficiencies.append(np.mean(fitts_metrics['efficiency']))
+                overshoots.append(np.sum(fitts_metrics['overshoots']))
+                num_trials.append(fitts_metrics['num_trials'])
+                completion_rates.append(fitts_metrics['completion_rate'])
+
+        df = pd.DataFrame({
+            'Model': model_labels,
+            'Throughput': throughputs,
+            'Path Efficiency': efficiencies,
+            'Overshoots': overshoots,
+            '# Trials': num_trials,
+            'Completion Rate': completion_rates
+        })
+        metrics = [column for column in df.columns if column != 'Model']    # Model should always be x axis - plot all other columns
+        for metric, ax in zip(metrics, axs):
+            sns.boxplot(df, x='Model', y=metric, ax=ax)
+        
         return fig
 
     def _plot_fitts_traces(self):
@@ -185,6 +219,8 @@ class Plotter:
     def plot(self, plot_type):
         if plot_type == 'fitts-metrics':
             fig = self._plot_fitts_metrics()
+        elif plot_type == 'fitts-metrics-time':
+            fig = self._plot_fitts_metrics_over_time()
         elif plot_type == 'fitts-traces':
             fig = self._plot_fitts_traces()
         elif plot_type == 'heatmap':
@@ -333,9 +369,9 @@ def format_names(models):
             ('Ciil', 'CIIL'),
             ('Within', 'W'),
             ('Combined', 'C'),
-            ('Subject ', 'S')
+            ('Subject-', 'S')
         )
-        formatted_name = name.replace('-', ' ').title()
+        formatted_name = name.title()
         for replacement in replacements:
             formatted_name = formatted_name.replace(replacement[0], replacement[1])
         return formatted_name
@@ -380,6 +416,7 @@ def main():
 
     plotter = Plotter(participants, args.analysis, stage=args.stage)
     plotter.plot('fitts-metrics')
+    plotter.plot('fitts-metrics-time')
     plotter.plot('fitts-traces')
     plotter.plot('heatmap')
     
