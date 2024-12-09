@@ -20,6 +20,8 @@ from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
 MODELS = ('ciil', 'combined-sgt', 'oracle', 'within-sgt')
+ADAPTIVE_MODELS = (MODELS[0], MODELS[2])
+SGT_MODELS = (MODELS[1], MODELS[3])
 
 
 @dataclass(frozen=True)
@@ -117,9 +119,9 @@ def make_config(participant: Participant, condition: int | str):
     else:
         model = participant.condition_order[condition]
 
-    if model in ['within-sgt', 'combined-sgt']: # baseline sgt no adaptation
+    if model in SGT_MODELS:
         model_is_adaptive = False
-    elif model in ['ciil', 'oracle']: # sgt adaptation
+    elif model in ADAPTIVE_MODELS:
         model_is_adaptive = True
     else:
         raise ValueError(f"Unexpected value for self.model. Got: {model}.")
