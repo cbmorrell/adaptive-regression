@@ -12,7 +12,7 @@ from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
 from utils.adaptation import TIMEOUT, DWELL_TIME
-from experiment import MODELS, Participant, make_config
+from experiment import MODELS, Participant, make_config, ADAPTIVE_MODELS
 
 
 class Plotter:
@@ -22,10 +22,10 @@ class Plotter:
         self.dpi = dpi
         self.stage = stage
         self.plot_adaptation = self.stage == 'adaptation'
-        self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
         if self.plot_adaptation:
-            self.models = self.models[-2:]  # only take adaptive models
-
+            self.models = ADAPTIVE_MODELS
+        else:
+            self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
 
         self.results_path = Path('results', self.analysis, self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
@@ -110,7 +110,9 @@ class Plotter:
         return fig
 
     def _plot_fitts_metrics(self):
-        fig, axs = plt.subplots(nrows=1, ncols=5, layout='constrained', figsize=(14, 6))
+        metrics = ['Throughput', 'Path Efficiency', 'Overshoots', '# Trials', 'Completion Rate']
+        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(14, 5))
+        adaptive_labels = []
         model_labels = []
         throughputs = []
         efficiencies = []
@@ -121,6 +123,7 @@ class Plotter:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 model_labels.append(format_names(model))
+                adaptive_labels.append('Yes' if model in ADAPTIVE_MODELS else 'No')
                 fitts_metrics = log.extract_fitts_metrics()
                 throughputs.append(np.mean(fitts_metrics['throughput']))
                 efficiencies.append(np.mean(fitts_metrics['efficiency']))
@@ -130,15 +133,16 @@ class Plotter:
 
         df = pd.DataFrame({
             'Model': model_labels,
-            'Throughput': throughputs,
-            'Path Efficiency': efficiencies,
-            'Overshoots': overshoots,
-            '# Trials': num_trials,
-            'Completion Rate': completion_rates
+            'Adaptive': adaptive_labels,
+            metrics[0]: throughputs,
+            metrics[1]: efficiencies,
+            metrics[2]: overshoots,
+            metrics[3]: num_trials,
+            metrics[4]: completion_rates
         })
-        metrics = [column for column in df.columns if column != 'Model']    # Model should always be x axis - plot all other columns
         for metric, ax in zip(metrics, axs):
-            sns.boxplot(df, x='Model', y=metric, ax=ax)
+            legend = 'auto' if metric == metrics[-1] else False # only plot legend on last axis
+            sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Adaptive', legend=legend) # maybe color boxes based on intended and unintended RMSE?
         
         return fig
 
