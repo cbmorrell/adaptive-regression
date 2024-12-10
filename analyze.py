@@ -145,7 +145,7 @@ class Plotter:
         })
         for metric, ax in zip(metrics, axs):
             legend = 'auto' if metric == metrics[-1] else False # only plot legend on last axis
-            sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Adaptive', legend=legend) # maybe color boxes based on intended and unintended RMSE?
+            sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Adaptive', legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level?
         
         return fig
 
