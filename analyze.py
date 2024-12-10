@@ -30,10 +30,13 @@ class Plotter:
         self.results_path = Path('results', self.analysis, self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
-    def read_log(self, participant_id, model):
+    def read_participant(self, participant_id):
         participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
-        assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id} {model}, but got {participant_files}."
-        participant = Participant.load(participant_files[0])
+        assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
+        return Participant.load(participant_files[0])
+
+    def read_log(self, participant_id, model):
+        participant = self.read_participant(participant_id)
         config = make_config(participant, model)
         if self.plot_adaptation:
             fitts_file = config.adaptation_fitts_file
@@ -220,6 +223,32 @@ class Plotter:
         
         return fig
 
+    def _plot_losses(self):
+        fig, ax = plt.subplots()
+        epochs = []
+        losses = []
+        model_labels = []
+        for model in self.models:
+            for participant in self.participants:
+                config = make_config(self.read_participant(participant), model)
+                loss_df = pd.read_csv(config.loss_file, header=None)
+                batch_timestamps = loss_df.iloc[:, 0]
+                batch_losses = loss_df.iloc[:, 1]
+                epoch_timestamps = np.unique(batch_timestamps)
+                epoch_losses = [np.mean(batch_losses[batch_timestamps == timestamp]) for timestamp in epoch_timestamps]
+                print(len(epoch_timestamps))
+                epochs.extend(list(range(len(epoch_timestamps))))
+                losses.extend(epoch_losses)
+                model_labels.extend(format_names([model for _ in range(len(epoch_timestamps))]))
+
+        df = pd.DataFrame({
+            'Epochs': epochs,
+            'Loss': losses,
+            'Model': model_labels
+        })
+        sns.lineplot(df, x='Epochs', y='Loss', hue='Model', ax=ax)
+        return fig
+
     def plot(self, plot_type):
         if plot_type == 'fitts-metrics':
             fig = self._plot_fitts_metrics()
@@ -229,6 +258,8 @@ class Plotter:
             fig = self._plot_fitts_traces()
         elif plot_type == 'heatmap':
             fig = self._plot_dof_activation_heatmap()
+        elif plot_type == 'loss':
+            fig = self._plot_losses()
         else:
             raise ValueError(f"Unexpected value for plot_type. Got: {plot_type}.")
 
@@ -320,6 +351,7 @@ class Trial:
         self.trial_time = self.timestamps[-1] - self.timestamps[0]
         self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
         self.is_within_dof_trial = np.any(np.abs(target[:2] - initial_cursor[:2]) <= (target[2] // 2 + initial_cursor[2] // 2))
+        # TODO: Fix is_within_dof_trial... gives the wrong result b/c it determines based on if the first cursor location is in line with the target, which is incorrect if the previous trial was a timeout and the cursor wasn't in the old target.
 
     @staticmethod
     def in_target(cursor, target):
@@ -426,6 +458,7 @@ def main():
     plotter.plot('fitts-metrics-over-time')
     plotter.plot('fitts-traces')
     plotter.plot('heatmap')
+    plotter.plot('loss')
     
     plt.show()
     print('-------------Analysis complete!-------------')
