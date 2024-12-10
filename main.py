@@ -13,6 +13,9 @@ def main():
     config_parser.add_argument('subject_directory', type=str, help='Directory to store data in. Stem will be taken as subject ID.')
     config_parser.add_argument('device', type=str, choices=('emager', 'myo', 'oymotion', 'sifi'), help='Device to stream. Choices are emager, myo, oymotion, sifi.')
     config_parser.add_argument('dominant_hand', type=str, choices=('left', 'right'), help='Dominant hand of participant. Determines direction for Fitts.')
+    config_parser.add_argument('age', type=int, help='Age of participant.')
+    config_parser.add_argument('sex', type=str, help='Sex of participant.')
+    config_parser.add_argument('experience', type=str, choices=('N', 'I', 'E'), help='Experience with myoelectric control. Novice (N), intermediate (I), or expert (E).')
 
     run_parser = subparsers.add_parser('run', description='Collect data.')
     run_parser.add_argument('participant', type=str, help='Path to configuration file.')
@@ -24,7 +27,7 @@ def main():
     print(args)
 
     if args.objective == 'config':
-        participant = make_participant(args.subject_directory, args.dominant_hand, args.device)
+        participant = make_participant(args.subject_directory, args.dominant_hand, args.device, args.age, args.sex, args.experience)
         participant.save()
         return
 

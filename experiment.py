@@ -32,6 +32,9 @@ class Participant:
     id: str
     condition_order: list
     mapping: str
+    age: int
+    sex: str
+    experience: str
 
     def __post_init__(self):
         Path(self.path).mkdir(parents=True, exist_ok=True)
@@ -49,7 +52,7 @@ class Participant:
         return participant
 
 
-def make_participant(path, dominant_hand, device):
+def make_participant(path, dominant_hand, device, age, sex, experience):
     id = Path(path).stem
 
     # Balanced latin square for 4 conditions
@@ -73,7 +76,11 @@ def make_participant(path, dominant_hand, device):
     else:
         raise ValueError(f"Unexpected value for handedness. Got: {dominant_hand}.")
 
-    return Participant(path, dominant_hand, device, id, list(condition_order), mapping)
+    if experience not in ('N', 'I', 'E'):
+        # Novice, intermediate, or expert
+        raise ValueError(f"Unexpected value for experience. Got: {experience}.")
+
+    return Participant(path, dominant_hand, device, id, list(condition_order), mapping, age, sex, experience)
 
 
 @dataclass(frozen=True)
