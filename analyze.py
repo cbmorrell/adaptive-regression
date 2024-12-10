@@ -236,7 +236,6 @@ class Plotter:
                 batch_losses = loss_df.iloc[:, 1]
                 epoch_timestamps = np.unique(batch_timestamps)
                 epoch_losses = [np.mean(batch_losses[batch_timestamps == timestamp]) for timestamp in epoch_timestamps]
-                print(len(epoch_timestamps))
                 epochs.extend(list(range(len(epoch_timestamps))))
                 losses.extend(epoch_losses)
                 model_labels.extend(format_names([model for _ in range(len(epoch_timestamps))]))
