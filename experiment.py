@@ -103,6 +103,7 @@ class Config:
     adaptation_model_file: str
     adaptation_fitts_file: str
     validation_fitts_file: str
+    loss_file: str
 
 
 def make_config(participant: Participant, condition: int | str):
@@ -146,9 +147,11 @@ def make_config(participant: Participant, condition: int | str):
     adaptation_model_file = Path(data_directory, 'adaptation_mdl.pkl').absolute().as_posix()
     adaptation_fitts_file = Path(sgt_model_file).with_name('adaptation_fitts.pkl').as_posix()
     validation_fitts_file = Path(sgt_model_file).with_name('validation_fitts.pkl').as_posix()
+    loss_file = Path(sgt_model_file).with_name('loss.csv').as_posix()
 
     return Config(participant, device, window_length, window_increment, features, feature_dictionary, model, model_is_adaptive, use_combined_data,
-                  animation_location, data_directory, num_reps, sgt_model_file, adaptation_model_file, adaptation_fitts_file, validation_fitts_file)
+                  animation_location, data_directory, num_reps, sgt_model_file, adaptation_model_file, adaptation_fitts_file, validation_fitts_file,
+                  loss_file)
 
 
 class Experiment:
@@ -264,7 +267,7 @@ class Experiment:
             return
         # prepare inner model
         sgt_memory = self.offdh_to_memory()
-        mdl = MLP(self.input_shape, self.config.BATCH_SIZE, self.config.LEARNING_RATE, self.config.LOSS_FUNCTION, Path(self.config.sgt_model_file).with_name('loss.csv').as_posix())
+        mdl = MLP(self.input_shape, self.config.BATCH_SIZE, self.config.LEARNING_RATE, self.config.LOSS_FUNCTION, self.config.loss_file)
         print('Fitting SGT model...')
         mdl.fit(num_epochs=self.config.NUM_TRAIN_EPOCHS, shuffle_every_epoch=True, memory=sgt_memory)
         # install mdl and thresholds to EMGClassifier
