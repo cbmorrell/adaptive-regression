@@ -218,6 +218,8 @@ class Plotter:
             x_hist_ax.set_title(format_names(model))
             x_hist_ax.set_ylabel('Frequency')
             y_hist_ax.set_xlabel('Frequency')
+            x_hist_ax.set_yscale('log')
+            y_hist_ax.set_xscale('log')
 
             # TODO: Maybe annotate with simultaneity metric
         
