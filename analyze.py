@@ -46,73 +46,39 @@ class Plotter:
         return Log(fitts_file, self.analysis)
 
     def _plot_fitts_metrics_over_time(self):
-        def plot_metric_over_time(values, ax, color):
-            values = moving_average(values)
-            ax.scatter(np.arange(len(values)), values, color=color, s=4)
-            ax.plot(values, alpha=0.5, color=color, linestyle='--')
-
-        fig = plt.figure(layout='constrained', figsize=(18, 6))
-        cmap = mpl.colormaps['Dark2']
-        subfigs = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 3])
-        bar_axs = subfigs[0].subplots(nrows=3, ncols=1, sharex=True)
-        time_axs = subfigs[1].subplots(nrows=3, ncols=len(self.models), sharex=True)
-        lines = []
-        bar_labels = []
-        subject_throughputs = []
-        subject_efficiencies = []
-        subject_overshoots = []
-        zorder = 2  # zorder=2 so points are plotted on top of bar plot
-        for model_idx, model in enumerate(self.models):
-            model_throughputs = []
-            model_efficiencies = []
-            model_overshoots = []
-            bar_labels.append(format_names(model))
-            for participant_idx, participant in enumerate(self.participants):
+        metrics = ['Throughput', 'Path Efficiency', 'Overshoots']
+        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), sharex=True, layout='constrained', figsize=(12, 6))
+        model_labels = []
+        throughputs = []
+        path_efficiencies = []
+        overshoots = []
+        trials = []
+        for model in self.models:
+            for participant in self.participants:
                 log = self.read_log(participant, model)
                 fitts_metrics = log.extract_fitts_metrics()
-                model_throughputs.append(np.mean(fitts_metrics['throughput']))
-                model_efficiencies.append(np.mean(fitts_metrics['efficiency']))
-                model_overshoots.append(np.sum(fitts_metrics['overshoots']))
+                throughputs.extend(moving_average(fitts_metrics['throughput']))
+                path_efficiencies.extend(moving_average(fitts_metrics['efficiency']))
+                overshoots.extend(moving_average(fitts_metrics['overshoots']))
+                num_trials = len(moving_average(fitts_metrics['throughput']))
+                trials.extend([idx + 1 for idx in range(num_trials)])
+                model_labels.extend([format_names(model) for _ in range(num_trials)])
 
-                # Bar plot
-                color = cmap(participant_idx)
-                lines.append(bar_axs[0].scatter(bar_labels[-1], model_throughputs[-1], label=participant, zorder=zorder, color=color))
-                bar_axs[1].scatter(bar_labels[-1], model_efficiencies[-1], zorder=zorder, color=color)
-                bar_axs[2].scatter(bar_labels[-1], model_overshoots[-1], zorder=zorder, color=color)
-
-                # Time series plots in a row share y-axis
-                time_axs[0, model_idx].sharey(time_axs[0, 0])
-                time_axs[1, model_idx].sharey(time_axs[1, 0])
-                time_axs[2, model_idx].sharey(time_axs[2, 0])
-
-                # Plot over time
-                time_axs[0, model_idx].set_title(bar_labels[-1])
-                time_axs[2, model_idx].set_xlabel('Trial #')
-                plot_metric_over_time(fitts_metrics['throughput'], time_axs[0, model_idx], color)
-                plot_metric_over_time(fitts_metrics['efficiency'], time_axs[1, model_idx], color)
-                plot_metric_over_time(fitts_metrics['overshoots'], time_axs[2, model_idx], color)
-
-
-            subject_throughputs.append(np.mean(model_throughputs))
-            subject_efficiencies.append(np.mean(model_efficiencies))
-            subject_overshoots.append(np.mean(model_overshoots))
-
-        handles = get_unique_legend_handles(lines)
-        bar_color = 'black'
-        bar_axs[0].bar(bar_labels, subject_throughputs, color=bar_color)
-        bar_axs[1].bar(bar_labels, subject_efficiencies, color=bar_color)
-        bar_axs[2].bar(bar_labels, subject_overshoots, color=bar_color)
-        bar_axs[0].set_ylabel('Throughput')
-        bar_axs[1].set_ylabel('Path Efficiency')
-        bar_axs[2].set_ylabel('Overshoots')
-        bar_axs[0].set_title('Across Subjects')
-
-        if len(self.participants) != 1:
-            time_axs[-1, -1].legend(handles.values(), format_names(handles.keys()), ncols=2)
+        df = pd.DataFrame({
+            'Trials': trials,
+            'Model': model_labels,
+            metrics[0]: throughputs,
+            metrics[1]: path_efficiencies,
+            metrics[2]: overshoots
+        })
+        for metric, ax in zip(metrics, axs):
+            legend = 'auto' if metric == metrics[-1] else False
+            sns.lineplot(df, x='Trials', y=metric, hue='Model', ax=ax, legend=legend)
 
         return fig
 
     def _plot_fitts_metrics(self):
+        # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots', '# Trials', 'Completion Rate']
         fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(14, 8))
         adaptive_labels = []
