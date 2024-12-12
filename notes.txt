@@ -1,2 +1,4 @@
 subject-005: C0 stopped well. "I like this one"
 subject-006: C2 simultaneity was harder.
+subject-009: Adaptation is nice. gives me a boost at the end b/c I got better.
+subject-011: Oracle approach catastrophically failed. Model constantly predicted supination, and pronation wasn't predicted after a certain point. This happened during validation for some reason, so the model could not recover.
