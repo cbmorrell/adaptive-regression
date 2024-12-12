@@ -114,7 +114,7 @@ class Plotter:
 
     def _plot_fitts_metrics(self):
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots', '# Trials', 'Completion Rate']
-        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(14, 5))
+        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(14, 8))
         adaptive_labels = []
         model_labels = []
         throughputs = []
@@ -122,30 +122,40 @@ class Plotter:
         overshoots = []
         num_trials = []
         completion_rates = []
+        trial_types = []
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
-                model_labels.append(format_names(model))
-                adaptive_labels.append('Yes' if model in ADAPTIVE_MODELS else 'No')
-                fitts_metrics = log.extract_fitts_metrics()
-                throughputs.append(np.mean(fitts_metrics['throughput']))
-                efficiencies.append(np.mean(fitts_metrics['efficiency']))
-                overshoots.append(np.sum(fitts_metrics['overshoots']))
-                num_trials.append(fitts_metrics['num_trials'])
-                completion_rates.append(fitts_metrics['completion_rate'])
+                logs = [log]
+                if not log.exclude_combined_dof_trials and not log.exclude_within_dof_trials:
+                    # Group box plot based on within vs. combined DoF trials
+                    logs.append(Log(log.path, 'within'))
+                    logs.append(Log(log.path, 'combined'))
+
+                for log in logs:
+                    model_labels.append(format_names(model))
+                    adaptive_labels.append('Yes' if model in ADAPTIVE_MODELS else 'No')
+                    trial_types.append(log.analysis.title())
+                    fitts_metrics = log.extract_fitts_metrics()
+                    throughputs.append(np.mean(fitts_metrics['throughput']))
+                    efficiencies.append(np.mean(fitts_metrics['efficiency']))
+                    overshoots.append(np.sum(fitts_metrics['overshoots']))
+                    num_trials.append(fitts_metrics['num_trials'])
+                    completion_rates.append(fitts_metrics['completion_rate'])
 
         df = pd.DataFrame({
             'Model': model_labels,
             'Adaptive': adaptive_labels,
+            'Trials': trial_types,
             metrics[0]: throughputs,
             metrics[1]: efficiencies,
             metrics[2]: overshoots,
             metrics[3]: num_trials,
-            metrics[4]: completion_rates
+            metrics[4]: completion_rates,
         })
         for metric, ax in zip(metrics, axs):
             legend = 'auto' if metric == metrics[-1] else False # only plot legend on last axis
-            sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Adaptive', legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level?
+            sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Trials', legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
         
         return fig
 
