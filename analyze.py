@@ -329,6 +329,7 @@ class Trial:
         self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
         self.is_within_dof_trial = np.any(np.abs(target[:2] - initial_cursor[:2]) <= (target[2] // 2 + initial_cursor[2] // 2))
         # TODO: Fix is_within_dof_trial... gives the wrong result b/c it determines based on if the first cursor location is in line with the target, which is incorrect if the previous trial was a timeout and the cursor wasn't in the old target.
+        # TODO: Maybe instead of doing this on a per-trial basis we do it per sample. This would capture movements in 2-DoF trials where the user tried to move sequentially. Maybe find all trials that are in a target runway and sum the distance they travelled in the wrong component (then normalize by some value... # of samples? distance from target?)
 
     @staticmethod
     def in_target(cursor, target):
