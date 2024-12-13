@@ -48,7 +48,6 @@ def main():
         experiment.start_sgt(online_data_handler)
     else:
         experiment.run_isofitts(online_data_handler)
-    # TODO: Make video of Fitts vs Polar Fitts side by side
 
     print('------------------Main script complete------------------')
 
