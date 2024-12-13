@@ -1,4 +1,7 @@
 subject-005: C0 (CIIL) stopped well. "I like this one"
 subject-006: C2 (CIIL) simultaneity was harder.
 subject-009: Adaptation is nice. Gives me a boost at the end b/c I got better.
+subject-010: Supination was a struggle for CIIL.
 subject-011: Oracle approach catastrophically failed. Model constantly predicted supination, and pronation wasn't predicted after a certain point. This happened during validation for some reason, so the model could not recover.
+subject-013: Less action interference later on during adaptation for C0. C0 very lenient around 0 and predicted well NM. Supination performed very poorly here I think b/c NM threshold wasn't tested to be super robust. C2 getting further from smooth control over adaptation (choppy, couldn't stop, not listening to commands).
+subject-014: Adaptive models are more stable. C2 was better than C1.
