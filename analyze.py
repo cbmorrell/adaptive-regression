@@ -80,7 +80,7 @@ class Plotter:
     def _plot_fitts_metrics(self):
         # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots', '# Trials', 'Completion Rate']
-        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(14, 8))
+        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(16, 8))
         adaptive_labels = []
         model_labels = []
         throughputs = []
@@ -121,7 +121,10 @@ class Plotter:
         })
         for metric, ax in zip(metrics, axs):
             legend = 'auto' if metric == metrics[-1] else False # only plot legend on last axis
-            sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Trials', legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
+            if len(self.participants) == 1:
+                sns.barplot(df, x='Model', y=metric, ax=ax, hue='Trials', legend=legend)
+            else:
+                sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Trials', legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
         
         return fig
 
