@@ -9,7 +9,7 @@ from sklearn.decomposition import PCA
 
 
 class MLP(nn.Module):
-    def __init__(self, input_shape, batch_size, lr, loss_type, loss_file):
+    def __init__(self, input_shape, batch_size, lr, loss_type, loss_file = None):
         super(MLP, self).__init__()
         self.input_shape = input_shape
         self.learning_rate = lr
@@ -45,7 +45,7 @@ class MLP(nn.Module):
     
     def setup_optimizer(self):
         # set optimizer
-        self.optimizer_classifier = optim.Adam(self.net.parameters(), lr=self.learning_rate)
+        self.optimizer = optim.Adam(self.net.parameters(), lr=self.learning_rate)
         if self.loss_type == "MSELoss":
             self.loss_function = nn.MSELoss()
         elif self.loss_type == 'L1':
@@ -68,7 +68,7 @@ class MLP(nn.Module):
         return output.detach().numpy()
 
 
-    def fit(self, num_epochs, shuffle_every_epoch=True, memory=None):
+    def fit(self, memory, num_epochs, shuffle_every_epoch=True):
         self.net.to(self.train_device)
         num_batch = len(memory) // self.batch_size
         losses = []
@@ -85,20 +85,21 @@ class MLP(nn.Module):
                     targets = memory.experience_targets[batch_start:batch_end].to(self.train_device)
                     predictions = self.forward(input)
                     loss_value = self.loss_function(predictions, targets)
-                    self.optimizer_classifier.zero_grad()
+                    self.optimizer.zero_grad()
                     loss_value.backward()
-                    self.optimizer_classifier.step()
+                    self.optimizer.step()
                     loss.append(loss_value.item())
                     batch_start = batch_end
                 losses.append(sum(loss)/len(loss))
-                with open(self.loss_file, 'a') as f:
-                    f.writelines([str(t) + "," + str(i) + "\n" for i in loss])
+                if self.loss_file is not None:
+                    with open(self.loss_file, 'a') as f:
+                        f.writelines([str(t) + "," + str(i) + "\n" for i in loss])
         self.net.to(self.foreground_device)
 
     def adapt(self, memory, num_epochs, filename = None):
         self.net.to(self.train_device)
         self.train()
-        self.fit(num_epochs, memory=memory)
+        self.fit(memory, num_epochs)
         if filename is not None:
             self.visualize(memory=memory, filename=filename)
         self.net.to(self.foreground_device)
