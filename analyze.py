@@ -3,6 +3,7 @@ import math
 import pickle
 from argparse import ArgumentParser
 
+import torch
 import pandas as pd
 import libemg
 import numpy as np
@@ -11,13 +12,18 @@ import matplotlib as mpl
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
-from utils.adaptation import TIMEOUT, DWELL_TIME
-from experiment import MODELS, Participant, make_config, ADAPTIVE_MODELS
+from utils.adaptation import TIMEOUT, DWELL_TIME, Memory
+from utils.models import MLP
+from experiment import MODELS, Participant, make_config, ADAPTIVE_MODELS, Config
 
 
 class Plotter:
     def __init__(self, participants, analysis, dpi = 400, stage = 'validation'):
-        self.participants = participants
+        self.participants = []
+        for participant_id in participants:
+            participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
+            assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
+            self.participants.append(Participant.load(participant_files[0]))
         self.analysis = analysis
         self.dpi = dpi
         self.stage = stage
@@ -30,13 +36,7 @@ class Plotter:
         self.results_path = Path('results', self.analysis, self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
-    def read_participant(self, participant_id):
-        participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
-        assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
-        return Participant.load(participant_files[0])
-
-    def read_log(self, participant_id, model):
-        participant = self.read_participant(participant_id)
+    def read_log(self, participant, model):
         config = make_config(participant, model)
         if self.plot_adaptation:
             fitts_file = config.adaptation_fitts_file
@@ -211,7 +211,7 @@ class Plotter:
         model_labels = []
         for model in self.models:
             for participant in self.participants:
-                config = make_config(self.read_participant(participant), model)
+                config = make_config(participant, model)
                 loss_df = pd.read_csv(config.loss_file, header=None)
                 batch_timestamps = loss_df.iloc[:, 0]
                 batch_losses = loss_df.iloc[:, 1]
@@ -229,6 +229,43 @@ class Plotter:
         sns.lineplot(df, x='Epochs', y='Loss', hue='Model', ax=ax)
         return fig
 
+    def _plot_num_reps_wsgt(self):
+        fig, ax = plt.subplots()
+        rep_ranges = [idx for idx in range(1, 7)]
+        metrics = {
+            'MAE': [],
+            '# reps': [],
+        }
+        fe = libemg.feature_extractor.FeatureExtractor()
+        for participant in self.participants:
+            test_config = make_config(participant, 'combined-sgt')
+            test_odh = test_config.load_sgt_data().isolate_data('reps', [0])   # just grab first rep
+            test_windows, test_metadata = test_odh.parse_windows(test_config.window_length, test_config.window_increment, metadata_operations={'labels': 'last_sample'})
+            test_labels = test_metadata['labels']
+            test_features = fe.extract_features(test_config.features, test_windows, test_config.feature_dictionary, array=True)
+
+            for num_reps in rep_ranges:
+                train_config = make_config(participant, 'within-sgt')
+                train_odh = train_config.load_sgt_data().isolate_data('reps', [idx for idx in range(num_reps)])
+                assert len(train_odh.data) == num_reps, f"Expected {num_reps} files, but got {len(train_odh.data)}."
+                train_windows, train_metadata = train_odh.parse_windows(train_config.window_length, train_config.window_increment, metadata_operations={'labels': 'last_sample'})
+                train_labels = train_metadata['labels']
+                train_features = fe.extract_features(train_config.features, train_windows, train_config.feature_dictionary, array=True)
+
+                mdl = MLP(train_features.shape[1], Config.BATCH_SIZE, Config.LEARNING_RATE, Config.LOSS_FUNCTION)
+                memory = Memory()
+                memory.add_memories(torch.tensor(train_features, dtype=torch.float32), torch.tensor(train_labels, dtype=torch.float32))
+                mdl.fit(memory, Config.NUM_TRAIN_EPOCHS)
+
+                predictions = mdl.predict(test_features)
+                mae = np.abs(predictions - test_labels.astype(predictions.dtype)).mean(axis=0).mean()
+                metrics['MAE'].append(mae)
+                metrics['# reps'].append(num_reps)
+
+        df = pd.DataFrame(metrics)
+        sns.boxplot(df, x='# reps', y='MAE', ax=ax)
+        return fig
+
     def plot(self, plot_type):
         if plot_type == 'fitts-metrics':
             fig = self._plot_fitts_metrics()
@@ -240,14 +277,16 @@ class Plotter:
             fig = self._plot_dof_activation_heatmap()
         elif plot_type == 'loss':
             fig = self._plot_losses()
+        elif plot_type == 'num-reps-wsgt':
+            fig = self._plot_num_reps_wsgt()
         else:
             raise ValueError(f"Unexpected value for plot_type. Got: {plot_type}.")
 
         title = f"{plot_type} {self.analysis} Trials".replace('-', ' ').title()
         filename = plot_type
         if len(self.participants) == 1:
-            filename += f"-{self.participants[0]}"
-            title += f" ({self.participants[0]})"
+            filename += f"-{self.participants[0].id}"
+            title += f" ({self.participants[0].id})"
         fig.suptitle(title)
         filename += '.png'
         filepath = Path(self.results_path, filename)
