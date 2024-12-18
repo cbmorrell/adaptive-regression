@@ -245,11 +245,12 @@ class Experiment:
             
         offdh = libemg.data_handler.OfflineDataHandler()
         regex_filters = [
-            libemg.data_handler.RegexFilter("_R_","_emg.csv",["0","1","2","3","4"], "reps"),
+            libemg.data_handler.RegexFilter("_R_","_emg.csv", [str(idx) for idx in range(self.config.num_reps)], "reps"),
             libemg.data_handler.RegexFilter("/", "/",[str(self.config.participant.id)], "subjects"),
             libemg.data_handler.RegexFilter('/', '/', [self.config.model], 'model_data')
         ]
         offdh.get_data(self.config.data_directory, regex_filters, metadata_fetchers, ",")
+        assert len(offdh.data) == self.config.num_reps, f"Expected {self.config.num_reps} files, but found {len(offdh.data)}."
         return offdh
 
     def offdh_to_memory(self):
