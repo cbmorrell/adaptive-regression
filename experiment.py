@@ -112,6 +112,25 @@ class Config:
     validation_fitts_file: str
     loss_file: str
 
+    def load_sgt_data(self):
+        # parse offline data into an offline data handler
+        def package_function(x, y):
+            x_path = Path(x)
+            y_path = Path(y)
+            return x_path.parent == y_path.parent and x_path.name[2] == y_path.name[2]
+
+        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/C_', ".txt", ['0', '1'], "labels"), package_function)]
+            
+        offdh = libemg.data_handler.OfflineDataHandler()
+        regex_filters = [
+            libemg.data_handler.RegexFilter("_R_","_emg.csv", [str(idx) for idx in range(self.num_reps)], "reps"),
+            libemg.data_handler.RegexFilter("/", "/",[str(self.participant.id)], "subjects"),
+            libemg.data_handler.RegexFilter('/', '/', [self.model], 'model_data')
+        ]
+        offdh.get_data(self.data_directory, regex_filters, metadata_fetchers, ",")
+        # assert len(offdh.data) == self.num_reps, f"Expected {self.num_reps} files, but found {len(offdh.data)}."
+        return offdh
+
 
 def make_config(participant: Participant, condition: int | str):
     device = Device(participant.device_name)
@@ -234,27 +253,8 @@ class Experiment:
         model.run(block=False)
         return model
 
-    def load_sgt_data(self):
-        # parse offline data into an offline data handler
-        def package_function(x, y):
-            x_path = Path(x)
-            y_path = Path(y)
-            return x_path.parent == y_path.parent and x_path.name[2] == y_path.name[2]
-
-        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/C_', ".txt", ['0', '1'], "labels"), package_function)]
-            
-        offdh = libemg.data_handler.OfflineDataHandler()
-        regex_filters = [
-            libemg.data_handler.RegexFilter("_R_","_emg.csv", [str(idx) for idx in range(self.config.num_reps)], "reps"),
-            libemg.data_handler.RegexFilter("/", "/",[str(self.config.participant.id)], "subjects"),
-            libemg.data_handler.RegexFilter('/', '/', [self.config.model], 'model_data')
-        ]
-        offdh.get_data(self.config.data_directory, regex_filters, metadata_fetchers, ",")
-        assert len(offdh.data) == self.config.num_reps, f"Expected {self.config.num_reps} files, but found {len(offdh.data)}."
-        return offdh
-
     def offdh_to_memory(self):
-        offdh = self.load_sgt_data()
+        offdh = self.config.load_sgt_data()
         self.fi.filter(offdh)   # always apply filter to offline data
 
         train_windows, train_metadata = offdh.parse_windows(self.config.window_length, self.config.window_increment, metadata_operations={"labels": "last_sample"})
@@ -277,7 +277,7 @@ class Experiment:
         sgt_memory = self.offdh_to_memory()
         mdl = MLP(self.input_shape, self.config.BATCH_SIZE, self.config.LEARNING_RATE, self.config.LOSS_FUNCTION, self.config.loss_file)
         print('Fitting SGT model...')
-        mdl.fit(num_epochs=self.config.NUM_TRAIN_EPOCHS, shuffle_every_epoch=True, memory=sgt_memory)
+        mdl.fit(memory=sgt_memory, num_epochs=self.config.NUM_TRAIN_EPOCHS, shuffle_every_epoch=True)
         # install mdl and thresholds to EMGClassifier
         offline_regressor = libemg.emg_predictor.EMGRegressor(mdl)
         offline_regressor.install_feature_parameters(self.config.feature_dictionary)
