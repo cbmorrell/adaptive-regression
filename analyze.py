@@ -137,7 +137,7 @@ class Plotter:
                 log = self.read_log(participant, model)
                 traces = [trial.traces for trial in log.trials]
                 for trace in traces:
-                    lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant, linewidth=1, alpha=0.5))
+                    lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant.id, linewidth=1, alpha=0.5))
                 
             ax.set_title(format_names(model))
             ax.set_xlabel('X (Pixels)')
