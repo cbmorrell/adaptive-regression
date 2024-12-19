@@ -79,16 +79,20 @@ class Plotter:
 
     def _plot_fitts_metrics(self):
         # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
-        metrics = ['Throughput', 'Path Efficiency', 'Overshoots', '# Trials', 'Completion Rate']
+        metrics = {
+            'Throughput': [],
+            'Path Efficiency': [],
+            'Overshoots': [],
+            '# Trials': [],
+            'Completion Rate': [],
+            'Action Interference': []
+        }
+        trial_info = {
+            'Model': [],
+            'Adaptive': [],
+        }
+
         fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(16, 8))
-        adaptive_labels = []
-        model_labels = []
-        throughputs = []
-        efficiencies = []
-        overshoots = []
-        num_trials = []
-        completion_rates = []
-        trial_types = []
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
@@ -99,32 +103,28 @@ class Plotter:
                     logs.append(Log(log.path, 'combined'))
 
                 for log in logs:
-                    model_labels.append(format_names(model))
-                    adaptive_labels.append('Yes' if model in ADAPTIVE_MODELS else 'No')
-                    trial_types.append(log.analysis.title())
+                    trial_info['Model'].append(format_names(model))
+                    trial_info['Adaptive'].append('Yes' if model in ADAPTIVE_MODELS else 'No')
                     fitts_metrics = log.extract_fitts_metrics()
-                    throughputs.append(np.mean(fitts_metrics['throughput']))
-                    efficiencies.append(np.mean(fitts_metrics['efficiency']))
-                    overshoots.append(np.sum(fitts_metrics['overshoots']))
-                    num_trials.append(fitts_metrics['num_trials'])
-                    completion_rates.append(fitts_metrics['completion_rate'])
+                    metrics['Throughput'].append(np.mean(fitts_metrics['throughput']))
+                    metrics['Path Efficiency'].append(np.mean(fitts_metrics['efficiency']))
+                    metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
+                    metrics['# Trials'].append(fitts_metrics['num_trials'])
+                    metrics['Completion Rate'].append(fitts_metrics['completion_rate'])
+                    metrics['Action Interference'].append(np.mean(fitts_metrics['action_interference']))
 
-        df = pd.DataFrame({
-            'Model': model_labels,
-            'Adaptive': adaptive_labels,
-            'Trials': trial_types,
-            metrics[0]: throughputs,
-            metrics[1]: efficiencies,
-            metrics[2]: overshoots,
-            metrics[3]: num_trials,
-            metrics[4]: completion_rates,
-        })
-        for metric, ax in zip(metrics, axs):
-            legend = 'auto' if metric == metrics[-1] else False # only plot legend on last axis
+        data = {}
+        data.update(metrics)
+        data.update(trial_info)
+        df = pd.DataFrame(data)
+        x = 'Model'
+        hue = 'Adaptive'
+        for metric, ax in zip(metrics.keys(), axs):
+            legend = 'auto' if ax == axs[-1] else False # only plot legend on last axis
             if len(self.participants) == 1:
-                sns.barplot(df, x='Model', y=metric, ax=ax, hue='Trials', legend=legend)
+                sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend)
             else:
-                sns.boxplot(df, x='Model', y=metric, ax=ax, hue='Trials', legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
+                sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
         
         return fig
 
@@ -320,8 +320,7 @@ class Log:
 
         trials = []
         for t in all_trials:
-            if (t.is_timeout_trial and self.exclude_timeout_trials) or (t.is_within_dof_trial and self.exclude_within_dof_trials) or (not t.is_within_dof_trial 
-                and self.exclude_combined_dof_trials):
+            if t.is_timeout_trial and self.exclude_timeout_trials:
                 print(f"Skipping trial {t.trial_idx} in log {self.path}.")
                 continue
 
@@ -336,7 +335,8 @@ class Log:
             'efficiency': [],
             'throughput': [],
             'num_trials': -1,
-            'completion_rate': -1
+            'completion_rate': -1,
+            'action_interference': []
         }
         
         for t in self.trials:
@@ -346,6 +346,7 @@ class Log:
             fitts_results['throughput'].append(t.calculate_throughput())
             fitts_results['overshoots'].append(t.calculate_overshoots())
             fitts_results['efficiency'].append(t.calculate_efficiency())
+            fitts_results['action_interference'].append(t.action_interference)
 
         fitts_results['num_trials'] = len(fitts_results['throughput'])
         fitts_results['completion_rate'] = 1 - (len(fitts_results['timeouts']) / fitts_results['num_trials'])
@@ -365,14 +366,20 @@ class Trial:
         model_output = run_log['class_label'][trial_mask]
         self.predictions = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_output]
 
-        initial_cursor = np.array(self.cursor_positions[0])
         target = np.array(self.targets[-1])
         self.trial_time = self.timestamps[-1] - self.timestamps[0]
         self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
-        self.is_within_dof_trial = np.any(np.abs(target[:2] - initial_cursor[:2]) <= (target[2] // 2 + initial_cursor[2] // 2))
-        # TODO: Fix is_within_dof_trial... gives the wrong result b/c it determines based on if the first cursor location is in line with the target, which is incorrect if the previous trial was a timeout and the cursor wasn't in the old target.
-        # TODO: Maybe instead of doing this on a per-trial basis we do it per sample. This would capture movements in 2-DoF trials where the user tried to move sequentially. Maybe find all trials that are in a target runway and sum the distance they travelled in the wrong component (then normalize by some value... # of samples? distance from target?)
-
+        action_interference_predictions = []
+        for cursor_position, prediction in zip(self.cursor_positions, self.predictions):
+            in_line_with_target_mask = np.where(np.abs(target[:2] - cursor_position[:2]) <= (target[2] // 2 + cursor_position[2] // 2))[0]
+            if len(in_line_with_target_mask) != 1:
+                # In target or not in line in either component, so we skip this
+                continue
+            
+            wrong_component_magnitude = np.abs(prediction[in_line_with_target_mask[0]])
+            action_interference_predictions.append(wrong_component_magnitude)
+        self.action_interference = np.mean(action_interference_predictions)
+            
     @staticmethod
     def in_target(cursor, target):
         return math.dist(cursor[:2], target[:2]) < (target[2]/2 + cursor[2]/2)
