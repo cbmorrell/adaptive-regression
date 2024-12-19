@@ -85,14 +85,15 @@ class Plotter:
             'Overshoots': [],
             '# Trials': [],
             'Completion Rate': [],
-            'Action Interference': []
+            'Action Interference': [],
+            'Drift': []
         }
         trial_info = {
             'Model': [],
             'Adaptive': [],
         }
 
-        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(16, 8))
+        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(20, 8))
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
@@ -112,6 +113,7 @@ class Plotter:
                     metrics['# Trials'].append(fitts_metrics['num_trials'])
                     metrics['Completion Rate'].append(fitts_metrics['completion_rate'])
                     metrics['Action Interference'].append(np.mean(fitts_metrics['action_interference']))
+                    metrics['Drift'].append(np.mean(fitts_metrics['drift']))
 
         data = {}
         data.update(metrics)
@@ -135,7 +137,7 @@ class Plotter:
         for model, ax in zip(self.models, axs):
             for participant_idx, participant in enumerate(self.participants):
                 log = self.read_log(participant, model)
-                traces = [trial.traces for trial in log.trials]
+                traces = [trial.cursor_positions for trial in log.trials]
                 for trace in traces:
                     lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant.id, linewidth=1, alpha=0.5))
                 
@@ -336,17 +338,19 @@ class Log:
             'throughput': [],
             'num_trials': -1,
             'completion_rate': -1,
-            'action_interference': []
+            'action_interference': [],
+            'drift': []
         }
         
         for t in self.trials:
-
             if t.is_timeout_trial:
                 fitts_results['timeouts'].append(t.trial_idx)
+
             fitts_results['throughput'].append(t.calculate_throughput())
             fitts_results['overshoots'].append(t.calculate_overshoots())
             fitts_results['efficiency'].append(t.calculate_efficiency())
-            fitts_results['action_interference'].append(t.action_interference)
+            fitts_results['action_interference'].append(t.calculate_action_interference())
+            fitts_results['drift'].append(t.calculate_drift())
 
         fitts_results['num_trials'] = len(fitts_results['throughput'])
         fitts_results['completion_rate'] = 1 - (len(fitts_results['timeouts']) / fitts_results['num_trials'])
@@ -359,34 +363,27 @@ class Trial:
         self.trial_idx = trial_idx
 
         trial_mask = np.where(run_log['trial_number'] == self.trial_idx)[0]
-        self.cursor_positions = run_log['cursor_position'][trial_mask]
-        self.targets = run_log['goal_target'][trial_mask]
+        cursor_positions = run_log['cursor_position'][trial_mask]
+        targets = run_log['goal_target'][trial_mask]
+        assert np.all(targets == targets[0]), f"Found trial with multiple targets."
+        assert np.all(cursor_positions[:, 2] == cursor_positions[0, 2]), f"Found trial with multiple cursor widths."
+        self.cursor_width = cursor_positions[0, 2]
+        self.cursor_positions = cursor_positions[:, :2]
+        target = targets[0]
+        self.target_position = target[:2]
+        self.target_width = target[2]
         self.timestamps = run_log['global_clock'][trial_mask]
-        self.traces = self.cursor_positions[:, :2]
         model_output = run_log['class_label'][trial_mask]
         self.predictions = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_output]
-
-        target = np.array(self.targets[-1])
         self.trial_time = self.timestamps[-1] - self.timestamps[0]
         self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
-        action_interference_predictions = []
-        for cursor_position, prediction in zip(self.cursor_positions, self.predictions):
-            in_line_with_target_mask = np.where(np.abs(target[:2] - cursor_position[:2]) <= (target[2] // 2 + cursor_position[2] // 2))[0]
-            if len(in_line_with_target_mask) != 1:
-                # In target or not in line in either component, so we skip this
-                continue
-            
-            wrong_component_magnitude = np.abs(prediction[in_line_with_target_mask[0]])
-            action_interference_predictions.append(wrong_component_magnitude)
-        self.action_interference = np.mean(action_interference_predictions)
-            
-    @staticmethod
-    def in_target(cursor, target):
-        return math.dist(cursor[:2], target[:2]) < (target[2]/2 + cursor[2]/2)
+    
+    def in_target(self, cursor):
+        return math.dist(cursor, self.target_position) < (self.target_width // 2 + self.cursor_width // 2)
 
     def calculate_efficiency(self):
-        distance_travelled = np.sum([math.dist(self.cursor_positions[i][0:2], self.cursor_positions[i-1][0:2]) for i in range(1, len(self.cursor_positions))])
-        fastest_path = math.dist((self.cursor_positions[0])[0:2], (self.targets[0])[0:2])
+        distance_travelled = np.sum([math.dist(self.cursor_positions[i], self.cursor_positions[i-1]) for i in range(1, len(self.cursor_positions))])
+        fastest_path = math.dist(self.cursor_positions[0], self.target_position)
         return fastest_path / distance_travelled
 
     def calculate_throughput(self):
@@ -394,21 +391,38 @@ class Trial:
         if not self.is_timeout_trial:
             # Only subtract dwell time for successful trials
             trial_time -= DWELL_TIME
-        starting_cursor_position = (self.cursor_positions[0])[0:2]
-        target = self.targets[0]
-        target_position = target[:2]
-        target_width = target[-1]
-        distance = math.dist(starting_cursor_position, target_position)
-        id = math.log2(distance / target_width + 1)
+        starting_cursor_position = self.cursor_positions[0]
+        distance = math.dist(starting_cursor_position, self.target_position)
+        id = math.log2(distance / self.target_width + 1)
         return id / trial_time
 
     def calculate_overshoots(self):
-        in_bounds = [self.in_target(self.cursor_positions[i], self.targets[i]) for i in range(0, len(self.cursor_positions))]
+        in_bounds = [self.in_target(self.cursor_positions[i]) for i in range(0, len(self.cursor_positions))]
         overshoots = 0
         for i in range(1,len(in_bounds)):
             if in_bounds[i-1] == True and in_bounds[i] == False:
                 overshoots += 1 
         return overshoots
+
+    def calculate_action_interference(self):
+        action_interference_predictions = []
+        for cursor_position, prediction in zip(self.cursor_positions, self.predictions):
+            in_line_with_target_mask = np.where(np.abs(self.target_position - cursor_position) <= (self.target_width // 2 + self.cursor_width // 2))[0]
+            if len(in_line_with_target_mask) != 1:
+                # In target or not in line in either component, so we skip this
+                continue
+            wrong_component_magnitude = np.abs(prediction[in_line_with_target_mask[0]])
+            action_interference_predictions.append(wrong_component_magnitude)
+        return np.mean(action_interference_predictions)
+
+    def calculate_drift(self):
+        drift_predictions = []
+        for cursor_position, prediction in zip(self.cursor_positions, self.predictions):
+            if not self.in_target(cursor_position):
+                continue
+            prediction_magnitude = np.sum(np.abs(prediction))
+            drift_predictions.append(prediction_magnitude)
+        return np.mean(drift_predictions)
 
 
 def moving_average(a, window_size = 3):
