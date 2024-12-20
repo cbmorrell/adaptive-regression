@@ -179,19 +179,22 @@ class Plotter:
             # Plot
             # nm_mask = np.all(np.abs(model_predictions) < bins[bins.shape[0] // 2], axis=1)
             # model_predictions = model_predictions[~nm_mask]
+            simultaneous_mask = np.all(np.abs(model_predictions) > 1e-3, axis=1)    # predictions are never exactly 0
+            simultaneity = np.sum(simultaneous_mask) / model_predictions.shape[0]
             x_predictions = model_predictions[:, 0]
             y_predictions = model_predictions[:, 1]
             x_y_counts, _, _ = np.histogram2d(x_predictions, y_predictions, bins=bins, density=False)   # density sets it to return pdf, not % occurrences
             x_hist_ax.hist(x_predictions, bins=bins)
             y_hist_ax.hist(y_predictions, bins=bins, orientation='horizontal')
-            heatmap = sns.heatmap(x_y_counts, ax=heatmap_ax, cmap=sns.light_palette('seagreen', as_cmap=True), norm=mpl.colors.LogNorm())
+            # Flip heatmap y bins so they align with 1D histograms and show bins in ascending order
+            heatmap = sns.heatmap(np.flip(x_y_counts, axis=0), ax=heatmap_ax, cmap=sns.light_palette('seagreen', as_cmap=True), norm=mpl.colors.LogNorm())
 
             # Formatting
             colorbar = heatmap.collections[0].colorbar
             colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
             colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
             heatmap_ax.set_xticks(ticks, bins, rotation=90)
-            heatmap_ax.set_yticks(ticks, bins, rotation=0)
+            heatmap_ax.set_yticks(ticks, np.flip(bins), rotation=0)
             heatmap_ax.set_xlabel('Open / Close Activation')
             heatmap_ax.set_ylabel('Pro / Supination Activation')
             x_hist_ax.set_xticks(bins, bins, rotation=90)
@@ -202,7 +205,6 @@ class Plotter:
             x_hist_ax.set_yscale('log')
             y_hist_ax.set_xscale('log')
 
-            # TODO: Maybe annotate with simultaneity metric
         
         return fig
 
