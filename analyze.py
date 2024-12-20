@@ -102,10 +102,10 @@ class Plotter:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 logs = [log]
-                if not log.exclude_combined_dof_trials and not log.exclude_within_dof_trials:
-                    # Group box plot based on within vs. combined DoF trials
-                    logs.append(Log(log.path, 'within'))
-                    logs.append(Log(log.path, 'combined'))
+                # if not log.exclude_combined_dof_trials and not log.exclude_within_dof_trials:
+                #     # Group box plot based on within vs. combined DoF trials
+                #     logs.append(Log(log.path, 'within'))
+                #     logs.append(Log(log.path, 'combined'))
 
                 for log in logs:
                     trial_info['Model'].append(format_names(model))
@@ -408,6 +408,9 @@ class Trial:
                 continue
             wrong_component_magnitude = np.abs(prediction[in_line_with_target_mask[0]])
             action_interference_predictions.append(wrong_component_magnitude)
+        if len(action_interference_predictions) == 0:
+            # Can't determine action interference for this trial - exclude it
+            return np.nan
         return np.mean(action_interference_predictions)
 
     def calculate_drift(self):
@@ -417,6 +420,9 @@ class Trial:
                 continue
             prediction_magnitude = np.sum(np.abs(prediction))
             drift_predictions.append(prediction_magnitude)
+        if len(drift_predictions) == 0:
+            # Can't determine drift for this trial - exclude it
+            return np.nan
         return np.mean(drift_predictions)
 
 
