@@ -34,6 +34,8 @@ class Plotter:
             self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
 
         self.results_path = Path('results', self.analysis, self.stage)
+        if len(participants) == 1:
+            self.results_path = self.results_path.joinpath(self.participants[0].id)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
     def read_log(self, participant, model):
@@ -45,7 +47,7 @@ class Plotter:
 
         return Log(fitts_file, self.analysis)
 
-    def _plot_fitts_metrics_over_time(self):
+    def plot_fitts_metrics_over_time(self):
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots']
         fig, axs = plt.subplots(nrows=1, ncols=len(metrics), sharex=True, layout='constrained', figsize=(12, 6))
         model_labels = []
@@ -75,9 +77,11 @@ class Plotter:
             legend = 'auto' if metric == metrics[-1] else False
             sns.lineplot(df, x='Trials', y=metric, hue='Model', ax=ax, legend=legend)
 
+        fig.suptitle('Fitts Metrics Over Time')
+        self._save_fig(fig, 'fitts-metrics-over-time.png')
         return fig
 
-    def _plot_fitts_metrics(self):
+    def plot_fitts_metrics(self):
         # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
         metrics = {
             'Throughput': [],
@@ -128,9 +132,11 @@ class Plotter:
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
         
+        fig.suptitle('Fitts Metrics')
+        self._save_fig(fig, 'fitts-metrics.png')
         return fig
 
-    def _plot_fitts_traces(self):
+    def plot_fitts_traces(self):
         fig, axs = plt.subplots(nrows=1, ncols=len(self.models), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
         cmap = mpl.colormaps['Dark2']
         lines = []
@@ -149,9 +155,10 @@ class Plotter:
             legend_handles = get_unique_legend_handles(lines)
             axs[-1].legend(legend_handles.values(), format_names(legend_handles.keys()))
 
+        self._save_fig(fig, 'fitts-traces.png')
         return fig
 
-    def _plot_dof_activation_heatmap(self):
+    def plot_dof_activation_heatmap(self):
         # Create heatmap where x is DOF 1 and y is DOF2
         fig = plt.figure(figsize=(20, 5), constrained_layout=True)
         outer_grid = fig.add_gridspec(nrows=1, ncols=len(self.models))
@@ -208,10 +215,11 @@ class Plotter:
             axs[0, 1].text(0, 0.5, f"% Simultaneity: {100 * simultaneity:.1f}", size=12, ha='center', va='center', bbox=bbox)
             # This text box isn't perfect... it still shrinks the heatmap a bit
 
-        
+        fig.suptitle('Activation Heatmap')
+        self._save_fig(fig, 'heatmap.png')
         return fig
 
-    def _plot_losses(self):
+    def plot_loss(self):
         fig, ax = plt.subplots()
         epochs = []
         losses = []
@@ -234,9 +242,11 @@ class Plotter:
             'Model': model_labels
         })
         sns.lineplot(df, x='Epochs', y='Loss', hue='Model', ax=ax)
+        fig.suptitle('Training Loss')
+        self._save_fig(fig, 'loss.png')
         return fig
 
-    def _plot_num_reps_wsgt(self):
+    def plot_num_reps_wsgt(self):
         fig, ax = plt.subplots()
         rep_ranges = [idx for idx in range(1, 7)]
         metrics = {
@@ -271,32 +281,12 @@ class Plotter:
 
         df = pd.DataFrame(metrics)
         sns.boxplot(df, x='# reps', y='MAE', ax=ax)
+        fig.suptitle('Impact of # Reps During Training for W-SGT')
+        self._save_fig(fig, 'offline.png')
         return fig
 
-    def plot(self, plot_type):
-        if plot_type == 'fitts-metrics':
-            fig = self._plot_fitts_metrics()
-        elif plot_type == 'fitts-metrics-over-time':
-            fig = self._plot_fitts_metrics_over_time()
-        elif plot_type == 'fitts-traces':
-            fig = self._plot_fitts_traces()
-        elif plot_type == 'heatmap':
-            fig = self._plot_dof_activation_heatmap()
-        elif plot_type == 'loss':
-            fig = self._plot_losses()
-        elif plot_type == 'num-reps-wsgt':
-            fig = self._plot_num_reps_wsgt()
-        else:
-            raise ValueError(f"Unexpected value for plot_type. Got: {plot_type}.")
-
-        title = f"{plot_type}".replace('-', ' ').title()
-        filename = plot_type
-        if len(self.participants) == 1:
-            filename += f"-{self.participants[0].id}"
-            title += f" ({self.participants[0].id})"
-        fig.suptitle(title)
-        filename += '.png'
-        filepath = Path(self.results_path, filename)
+    def _save_fig(self, fig, filename):
+        filepath = self.results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
         print(f"File saved to {filepath.as_posix()}.")
 
@@ -500,11 +490,11 @@ def main():
         participants = str(args.participants).replace(' ', '').split(',')
 
     plotter = Plotter(participants, args.analysis, stage=args.stage)
-    plotter.plot('fitts-metrics')
-    plotter.plot('fitts-metrics-over-time')
-    plotter.plot('fitts-traces')
-    plotter.plot('heatmap')
-    plotter.plot('loss')
+    plotter.plot_fitts_metrics()
+    plotter.plot_fitts_metrics_over_time()
+    plotter.plot_fitts_traces()
+    plotter.plot_dof_activation_heatmap()
+    plotter.plot_loss()
     
     plt.show()
     print('-------------Analysis complete!-------------')
