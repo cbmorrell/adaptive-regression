@@ -159,6 +159,7 @@ class Plotter:
         height_ratios = [1, 2]
         bins = np.round(np.arange(-1.1, 1.2, 0.2), 2)  # extend past 1 to include 1 in arange
         ticks = np.arange(bins.shape[0])
+        bbox = {'boxstyle': 'round'}
         for model_idx, model in enumerate(self.models):
             model_predictions = []
             for participant in self.participants:
@@ -204,6 +205,8 @@ class Plotter:
             y_hist_ax.set_xlabel('Frequency')
             x_hist_ax.set_yscale('log')
             y_hist_ax.set_xscale('log')
+            axs[0, 1].text(0, 0.5, f"% Simultaneity: {100 * simultaneity:.1f}", size=12, ha='center', va='center', bbox=bbox)
+            # This text box isn't perfect... it still shrinks the heatmap a bit
 
         
         return fig
