@@ -132,7 +132,7 @@ class Plotter:
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
         
-        fig.suptitle('Fitts Metrics')
+        fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, 'fitts-metrics.png')
         return fig
 
@@ -155,6 +155,7 @@ class Plotter:
             legend_handles = get_unique_legend_handles(lines)
             axs[-1].legend(legend_handles.values(), format_names(legend_handles.keys()))
 
+        fig.suptitle('Fitts Traces')
         self._save_fig(fig, 'fitts-traces.png')
         return fig
 
