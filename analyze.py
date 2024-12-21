@@ -88,7 +88,7 @@ class Plotter:
             'Path Efficiency': [],
             'Overshoots': [],
             '# Trials': [],
-            'Completion Rate': [],
+            'Completion Rate (%)': [],
             'Action Interference': [],
             'Drift': []
         }
@@ -115,7 +115,7 @@ class Plotter:
                     metrics['Path Efficiency'].append(np.mean(fitts_metrics['efficiency']))
                     metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
                     metrics['# Trials'].append(fitts_metrics['num_trials'])
-                    metrics['Completion Rate'].append(fitts_metrics['completion_rate'])
+                    metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
                     metrics['Action Interference'].append(np.mean(fitts_metrics['action_interference']))
                     metrics['Drift'].append(np.mean(fitts_metrics['drift']))
 
@@ -379,7 +379,7 @@ class Trial:
 
     def calculate_efficiency(self):
         distance_travelled = np.sum([math.dist(self.cursor_positions[i], self.cursor_positions[i-1]) for i in range(1, len(self.cursor_positions))])
-        fastest_path = math.dist(self.cursor_positions[0], self.target_position)
+        fastest_path = math.dist(self.cursor_positions[0], self.target_position)    # TODO: Should this be based on the cursor position or where the previous target was?
         return fastest_path / distance_travelled
 
     def calculate_throughput(self):
