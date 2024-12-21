@@ -85,7 +85,7 @@ class Plotter:
         # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
         metrics = {
             'Throughput': [],
-            'Path Efficiency': [],
+            'Path Efficiency (%)': [],
             'Overshoots': [],
             '# Trials': [],
             'Completion Rate (%)': [],
@@ -112,7 +112,7 @@ class Plotter:
                     trial_info['Adaptive'].append('Yes' if model in ADAPTIVE_MODELS else 'No')
                     fitts_metrics = log.extract_fitts_metrics()
                     metrics['Throughput'].append(np.mean(fitts_metrics['throughput']))
-                    metrics['Path Efficiency'].append(np.mean(fitts_metrics['efficiency']))
+                    metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
                     metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
                     metrics['# Trials'].append(fitts_metrics['num_trials'])
                     metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
