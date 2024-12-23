@@ -286,6 +286,22 @@ class Plotter:
         self._save_fig(fig, 'offline.png')
         return fig
 
+    def plot_prompt_labels(self):
+        config = make_config(self.participants[0], 'within-sgt')
+        odh = config.load_sgt_data()
+        labels = odh.labels[0]
+        fig, ax = plt.subplots(layout='constrained')
+        t = np.linspace(0, 50, num=labels.shape[0]) # 1 rep was 50 seconds
+        ax.plot(t, labels[:, 0], label='Hand Open/Close')
+        ax.plot(t, labels[:, 1], label='Wrist Rotation')
+        ax.set_title('Prompt Trajectory')
+        ax.set_xlabel('Time (seconds)')
+        ax.set_ylabel('DoF Activation')
+        ax.legend(ncols=2, loc='upper right')
+        ax.set_ylim((-1.25, 1.25))
+        self._save_fig(fig, 'prompt.png')
+        return fig
+
     def _save_fig(self, fig, filename):
         filepath = self.results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
