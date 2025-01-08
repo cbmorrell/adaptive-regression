@@ -123,16 +123,15 @@ class Plotter:
         data.update(metrics)
         data.update(trial_info)
         df = pd.DataFrame(data)
-        # TODO: Make yes green or use different color palette
-        # sns.set_palette('Set1')
         x = 'Model'
         hue = 'Adaptive'
+        palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]}
         for metric, ax in zip(metrics.keys(), axs):
             legend = 'auto' if ax == axs[-1] else False # only plot legend on last axis
             if len(self.participants) == 1:
-                sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend)
+                sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette)
             else:
-                sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
+                sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
         
         fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, 'fitts-metrics.png')
