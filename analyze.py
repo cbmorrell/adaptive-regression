@@ -110,7 +110,7 @@ class Plotter:
                 for log in logs:
                     trial_info['Model'].append(format_names(model))
                     trial_info['Adaptive'].append('Yes' if model in ADAPTIVE_MODELS else 'No')
-                    fitts_metrics = log.extract_fitts_metrics()
+                    fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
                     metrics['Throughput'].append(np.mean(fitts_metrics['throughput']))
                     metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
                     metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
@@ -123,6 +123,8 @@ class Plotter:
         data.update(metrics)
         data.update(trial_info)
         df = pd.DataFrame(data)
+        # TODO: Make yes green or use different color palette
+        # sns.set_palette('Set1')
         x = 'Model'
         hue = 'Adaptive'
         for metric, ax in zip(metrics.keys(), axs):
@@ -342,7 +344,12 @@ class Log:
             
         self.trials = trials
 
-    def extract_fitts_metrics(self):
+    def extract_fitts_metrics(self, exclude_warmup_trials = False):
+        trials = self.trials
+        if exclude_warmup_trials:
+            num_warmup_trials = 20  # based on average plot of throughput over time
+            trials = trials[num_warmup_trials:]
+
         fitts_results = {
             'timeouts': [],
             'overshoots': [],
@@ -354,7 +361,7 @@ class Log:
             'drift': []
         }
         
-        for t in self.trials:
+        for t in trials:
             if t.is_timeout_trial:
                 fitts_results['timeouts'].append(t.trial_idx)
 
@@ -364,7 +371,7 @@ class Log:
             fitts_results['action_interference'].append(t.calculate_action_interference())
             fitts_results['drift'].append(t.calculate_drift())
 
-        fitts_results['num_trials'] = len(fitts_results['throughput'])
+        fitts_results['num_trials'] = len(trials)
         fitts_results['completion_rate'] = 1 - (len(fitts_results['timeouts']) / fitts_results['num_trials'])
             
         return fitts_results
