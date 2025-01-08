@@ -125,7 +125,7 @@ class Plotter:
         df = pd.DataFrame(data)
         x = 'Model'
         hue = 'Adaptive'
-        palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]}
+        palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]} # want "yes" to be green... assumes Dark2 color palette
         for metric, ax in zip(metrics.keys(), axs):
             legend = 'auto' if ax == axs[-1] else False # only plot legend on last axis
             if len(self.participants) == 1:
