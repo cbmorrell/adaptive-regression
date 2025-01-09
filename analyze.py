@@ -18,13 +18,12 @@ from experiment import MODELS, Participant, make_config, ADAPTIVE_MODELS, Config
 
 
 class Plotter:
-    def __init__(self, participants, analysis, dpi = 400, stage = 'validation'):
+    def __init__(self, participants, dpi = 400, stage = 'validation'):
         self.participants = []
         for participant_id in participants:
             participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
             assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
             self.participants.append(Participant.load(participant_files[0]))
-        self.analysis = analysis
         self.dpi = dpi
         self.stage = stage
         self.plot_adaptation = self.stage == 'adaptation'
@@ -33,7 +32,7 @@ class Plotter:
         else:
             self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
 
-        self.results_path = Path('results', self.analysis, self.stage)
+        self.results_path = Path('results', self.stage)
         if len(participants) == 1:
             self.results_path = self.results_path.joinpath(self.participants[0].id)
         self.results_path.mkdir(parents=True, exist_ok=True)
@@ -45,7 +44,7 @@ class Plotter:
         else:
             fitts_file = config.validation_fitts_file
 
-        return Log(fitts_file, self.analysis)
+        return Log(fitts_file)
 
     def plot_fitts_metrics_over_time(self):
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots']
@@ -303,6 +302,42 @@ class Plotter:
         self._save_fig(fig, 'prompt.png')
         return fig
 
+    def plot_decision_stream(self):
+        fig, ax = plt.subplots()
+        log = self.read_log(self.participants[12], 'ciil')
+
+        decision_stream_predictions = []
+        decision_stream_timestamps = []
+        for trial in log.trials:
+            decision_stream_predictions.extend(trial.predictions)
+            decision_stream_timestamps.extend(trial.prediction_timestamps)
+        decision_stream_predictions = np.array(decision_stream_predictions)
+
+        if self.stage == 'adaptation':
+            memory = Memory()
+            memory.from_file(Path(log.path).parent.as_posix(), 1000)
+            pseudolabels = []
+            ignored = []
+            for timestamp in decision_stream_timestamps:
+                try:
+                    idx = memory.experience_timestamps.index(timestamp)
+                    pseudolabels.append([timestamp, memory.experience_targets[idx, 1].item()])
+                except ValueError:
+                    ignored.append([timestamp, 0])
+
+            pseudolabels = np.array(pseudolabels)
+            ignored = np.array(ignored)
+            ax.scatter(pseudolabels[:, 0], pseudolabels[:, 1], s=2, label='Pseudolabels')
+            ax.scatter(ignored[:, 0], ignored[:, 1], s=2, label='Ignored')
+
+        else:
+            ax.plot(decision_stream_timestamps, decision_stream_predictions[:, 1])
+
+        ax.set_xlabel('Timestamps')
+        ax.set_ylabel('Pronation / Supination Activation')
+        ax.set_title(f"Decision Stream ({self.stage})".title())
+        self._save_fig(fig, 'decision-stream.png')
+
     def _save_fig(self, fig, filename):
         filepath = self.results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
@@ -310,7 +345,7 @@ class Plotter:
 
 
 class Log:
-    def __init__(self, path, analysis) -> None:
+    def __init__(self, path, analysis = None) -> None:
         self.path = path
         self.analysis = analysis
         if self.analysis == 'within':
@@ -319,9 +354,12 @@ class Log:
         elif self.analysis == 'combined':
             self.exclude_within_dof_trials = True
             self.exclude_combined_dof_trials = False
-        else:
+        elif analysis is None:
             self.exclude_within_dof_trials = False
             self.exclude_combined_dof_trials = False
+        else:
+            raise ValueError(f"Unexpected value for analysis. Got: {self.analysis}.")
+
         self.exclude_timeout_trials = False
 
         with open(self.path, 'rb') as f:
@@ -390,10 +428,11 @@ class Trial:
         target = targets[0]
         self.target_position = target[:2]
         self.target_width = target[2]
-        self.timestamps = run_log['global_clock'][trial_mask]
+        self.clock_timestamps = run_log['global_clock'][trial_mask]
+        self.prediction_timestamps = run_log['time_stamp'][trial_mask]
         model_output = run_log['class_label'][trial_mask]
         self.predictions = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_output]
-        self.trial_time = self.timestamps[-1] - self.timestamps[0]
+        self.trial_time = self.clock_timestamps[-1] - self.clock_timestamps[0]
         self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
     
     def in_target(self, cursor):
@@ -503,8 +542,6 @@ def plot_pilot_distance_vs_proportional_control():
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
-    parser.add_argument('-a', '--analysis', default='all', choices=('all', 'combined', 'within'), help='Subset of tasks to perform analysis on.')
-    parser.add_argument('-s', '--stage', default='validation', choices=('adaptation', 'validation'), help='Stage to analyze.')
     args = parser.parse_args()
     print(args)
 
@@ -518,12 +555,15 @@ def main():
     else:
         participants = str(args.participants).replace(' ', '').split(',')
 
-    plotter = Plotter(participants, args.analysis, stage=args.stage)
-    plotter.plot_fitts_metrics()
-    plotter.plot_fitts_metrics_over_time()
-    plotter.plot_fitts_traces()
-    plotter.plot_dof_activation_heatmap()
-    plotter.plot_loss()
+    validation_plotter = Plotter(participants, stage='validation')
+    validation_plotter.plot_fitts_metrics()
+    validation_plotter.plot_fitts_metrics_over_time()
+    validation_plotter.plot_dof_activation_heatmap()
+    validation_plotter.plot_loss()
+    validation_plotter.plot_decision_stream()
+
+    adaptation_plotter = Plotter(participants, stage='adaptation')
+    adaptation_plotter.plot_decision_stream()
     
     plt.show()
     print('-------------Analysis complete!-------------')
