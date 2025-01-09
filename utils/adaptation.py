@@ -147,21 +147,11 @@ class Memory:
                 self.experience_timestamps = [self.experience_timestamps[i] for i in unshuffle_ids]
 
     def write(self, save_dir, num_written=""):
-        with open(Path(save_dir, f"classifier_memory_{num_written}.pkl"), 'wb') as handle:
+        with open(Path(save_dir, f"memory_{num_written}.pkl"), 'wb') as handle:
             pickle.dump(self, handle)
     
-    def read(self, save_dir):
-        with open(save_dir +  'classifier_memory.pkl', 'rb') as handle:
-            loaded_content = pickle.load(self, handle)
-            self.experience_targets = loaded_content.experience_targets
-            self.experience_data    = loaded_content.experience_data
-            self.experience_context = loaded_content.experience_context
-            self.experience_outcome = loaded_content.experience_outcome
-            self.memories_stored    = loaded_content.memories_stored
-            self.experience_timestamps = loaded_content.experience_timestamps
-    
     def from_file(self, save_dir, memory_id):
-        with open(Path(save_dir, f"classifier_memory_{memory_id}.pkl"), 'rb') as handle:
+        with open(Path(save_dir, f"memory_{memory_id}.pkl"), 'rb') as handle:
             obj = pickle.load(handle)
         self.experience_targets = obj.experience_targets
         self.experience_data    = obj.experience_data
@@ -224,11 +214,6 @@ def make_pseudo_labels(environment_data, smm, approach, activation_threshold):
         # In the target
         adaptation_labels = np.array([0, 0])
         outcomes = ['N', 'N']
-        # NOTE: This approach works, but it's a bit naive.
-        # We're providing it data that is 0, but the user likely doesn't stop right on the target's edge. I think this is causing some drift.
-        # Then once it drifts, you often try to approach the target from a certain angle, so it'll drift into the target. This is bad too b/c you aren't moving, but you're telling the model you should be going towards the target.
-        # We could probably do something else naive and say that the user is comfortable giving half the radius as a buffer, but that's kind of random.
-        
     else:
         outcomes = []
         for prediction_component, direction_component in zip(prediction, optimal_direction):
