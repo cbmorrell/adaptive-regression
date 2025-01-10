@@ -1,39 +1,5 @@
-from pathlib import Path
-import time
-
 import libemg
 import numpy as np
-
-
-def collect_data(online_data_handler, media_folder, data_folder, num_reps):
-    try:
-        # Ensure data directory exists
-        Path(data_folder).mkdir(parents=True, exist_ok=False)
-    except FileExistsError:
-        # Directory already exists
-        if any(Path(data_folder).iterdir()):
-            # Folder is not empty
-            result = input(f'Data folder {data_folder} is not empty. Do you want to overwrite (y/n)?')
-            if result != 'y':
-                print(f'Skipping {data_folder}.')
-                return
-    
-    # Create GUI
-    args = {
-        "media_folder"         : media_folder,
-        "data_folder"          : data_folder,
-        "num_reps"             : num_reps,
-        "rest_time"            : 1,
-        "auto_advance"         : False,
-    }
-    gui = libemg.gui.GUI(online_data_handler, args=args, debug=False, gesture_width=500, gesture_height=500)
-    gui.start_gui()
-
-
-def append_to_file(filename, data):
-    with open(filename, 'a') as file:
-        file.write(data)
-
 
 
 class Device:
@@ -70,13 +36,6 @@ class Device:
     def stream(self):
         p, smi = self.streamer()
         return p, smi
-
-
-def cleanup_hardware(p):
-    print("Performing clean-up...")
-    p.signal.set()
-    time.sleep(3)
-    print("Clean-up finished.")
 
 
 def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_time=5, FPS=24):

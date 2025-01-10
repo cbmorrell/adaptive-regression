@@ -16,7 +16,7 @@ from PIL import Image
 
 from utils.models import MLP
 from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labels, AdaptationFitts, ADAPTATION_TIME
-from utils.data_collection import Device, collect_data, get_frame_coordinates
+from utils.data_collection import Device, get_frame_coordinates
 
 
 MODELS = ('within-sgt', 'combined-sgt', 'o-ciil', 'uc-ciil')
@@ -30,7 +30,7 @@ class Participant:
     dominant_hand: str
     device_name: str
     id: str
-    condition_order: list
+    condition_order: list[str]
     mapping: str
     age: int
     sex: str
@@ -301,7 +301,29 @@ class Experiment:
         if self.config.use_combined_data:
             self.make_collection_video('combined')
 
-        collect_data(online_data_handler, self.config.animation_location, self.config.data_directory, self.config.num_reps)
+        data_path = Path(self.config.data_directory)
+        try:
+            # Ensure data directory exists
+            data_path.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            # Directory already exists
+            if any(data_path.iterdir()):
+                # Folder is not empty
+                result = input(f'Data folder {self.config.data_directory} is not empty. Do you want to overwrite (y/n)?')
+                if result != 'y':
+                    print(f'Skipping {self.config.data_directory}.')
+                    return
+        
+        # Create GUI
+        args = {
+            "media_folder"         : self.config.animation_location,
+            "data_folder"          : self.config.data_directory,
+            "num_reps"             : self.config.num_reps,
+            "rest_time"            : 1,
+            "auto_advance"         : False
+        }
+        gui = libemg.gui.GUI(online_data_handler, args=args, debug=False, gesture_width=500, gesture_height=500)
+        gui.start_gui()
 
     def make_collection_video(self, video):
         libemg.gui.GUI(None).download_gestures([2, 3, 6, 7], self.config.IMAGE_DIRECTORY)
