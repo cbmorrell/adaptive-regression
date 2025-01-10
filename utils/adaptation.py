@@ -60,7 +60,7 @@ class AdaptationFitts(libemg.environments.fitts.ISOFitts):
 
 
 class Memory:
-    def __init__(self, max_len=None):
+    def __init__(self):
         # What are the current targets for the model?
         self.experience_targets    = []
         # What are the inputs for the saved experiences?
@@ -113,8 +113,8 @@ class Memory:
                 self.experience_timestamps = experience_timestamps
                 self.memories_stored    += len(experience_targets)
             else:
-                self.experience_targets = torch.cat((self.experience_targets,experience_targets))
-                self.experience_data = torch.vstack((self.experience_data,experience_data))
+                self.experience_targets = torch.cat((self.experience_targets, experience_targets))
+                self.experience_data = torch.vstack((self.experience_data, experience_data))
                 self.experience_context = np.concatenate((self.experience_context,experience_context))
                 self.experience_outcome = np.concatenate((self.experience_outcome, experience_outcome)) 
                 self.experience_timestamps.extend(experience_timestamps)
@@ -130,7 +130,7 @@ class Memory:
             # SGT does not have these fields
             if len(self.experience_context):
                 self.experience_context = self.experience_context[indices]
-                self.experience_outcome = [self.experience_outcome[i] for i in indices]
+                self.experience_outcome = self.experience_outcome[indices]
                 self.experience_timestamps = [self.experience_timestamps[i] for i in indices]
 
         

@@ -46,7 +46,7 @@ class MLP(nn.Module):
     def setup_optimizer(self):
         # set optimizer
         self.optimizer = optim.Adam(self.net.parameters(), lr=self.learning_rate)
-        if self.loss_type == "MSELoss":
+        if self.loss_type == 'MSELoss':
             self.loss_function = nn.MSELoss()
         elif self.loss_type == 'L1':
             self.loss_function = nn.L1Loss()

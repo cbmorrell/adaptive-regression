@@ -117,12 +117,12 @@ class Config:
             y_path = Path(y)
             return x_path.parent == y_path.parent and x_path.name[2] == y_path.name[2]
 
-        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/C_', ".txt", ['0', '1'], "labels"), package_function)]
+        metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/C_', '.txt', ['0', '1'], 'labels'), package_function)]
         
         offdh = libemg.data_handler.OfflineDataHandler()
         regex_filters = [
-            libemg.data_handler.RegexFilter("_R_","_emg.csv", [str(idx) for idx in range(self.num_reps)], "reps"),
-            libemg.data_handler.RegexFilter("/", "/",[str(self.participant.id)], "subjects"),
+            libemg.data_handler.RegexFilter('_R_', '_emg.csv', [str(idx) for idx in range(self.num_reps)], 'reps'),
+            libemg.data_handler.RegexFilter('/', '/', [str(self.participant.id)], 'subjects'),
             libemg.data_handler.RegexFilter('/', '/', [self.model], 'model_data')
         ]
         offdh.get_data(self.data_directory, regex_filters, metadata_fetchers, ",")
@@ -163,13 +163,13 @@ def make_config(participant: Participant, condition: int | str):
 
     if model_is_adaptive:
         num_reps = 1
-    elif 'combined' in model:
+    elif use_combined_data:
         num_reps = 3    # 3 of each video
     else:
         num_reps = 6    # 6 50-second videos makes 5 minutes
 
     sgt_model_file = Path(data_directory, 'sgt_mdl.pkl').absolute().as_posix()
-    adaptation_model_file = Path(data_directory, 'adaptation_mdl.pkl').absolute().as_posix()
+    adaptation_model_file = Path(sgt_model_file).with_name('adaptation_mdl.pkl').as_posix()
     adaptation_fitts_file = Path(sgt_model_file).with_name('adaptation_fitts.pkl').as_posix()
     validation_fitts_file = Path(sgt_model_file).with_name('validation_fitts.pkl').as_posix()
     loss_file = Path(sgt_model_file).with_name('loss.csv').as_posix()
@@ -209,9 +209,9 @@ class Experiment:
 
 
         fe = libemg.feature_extractor.FeatureExtractor()
-        fake_window = np.random.randn(1,self.config.device.num_channels,self.config.window_length)
-        returned_features = fe.extract_features(self.config.features, fake_window, self.config.feature_dictionary)
-        self.input_shape = sum([returned_features[key].shape[1] for key in returned_features.keys()])
+        fake_window = np.random.randn(1, self.config.device.num_channels, self.config.window_length)
+        feature_matrix = fe.extract_features(self.config.features, fake_window, self.config.feature_dictionary, array=True)
+        self.input_shape = feature_matrix.shape[1]
 
         self.fi = libemg.filtering.Filter(self.config.device.fs)
         self.fi.install_common_filters()
@@ -256,15 +256,15 @@ class Experiment:
         offdh = self.config.load_sgt_data()
         self.fi.filter(offdh)   # always apply filter to offline data
 
-        train_windows, train_metadata = offdh.parse_windows(self.config.window_length, self.config.window_increment, metadata_operations={"labels": "last_sample"})
+        train_windows, train_metadata = offdh.parse_windows(self.config.window_length, self.config.window_increment, metadata_operations={'labels': 'last_sample'})
         fe = libemg.feature_extractor.FeatureExtractor()
         features = fe.extract_features(self.config.features, train_windows, self.config.feature_dictionary)
         features = torch.hstack([torch.tensor(features[key], dtype=torch.float32) for key in features.keys()])
-        targets = torch.tensor(train_metadata["labels"], dtype=torch.float32)
+        targets = torch.tensor(train_metadata['labels'], dtype=torch.float32)
 
         memory = Memory()
-        memory.add_memories(experience_data = features,
-                            experience_targets = targets)
+        memory.add_memories(experience_data=features,
+                            experience_targets=targets)
         memory.memories_stored = features.shape[0]
         memory.shuffle()
         return memory
@@ -277,11 +277,11 @@ class Experiment:
         mdl = MLP(self.input_shape, self.config.BATCH_SIZE, self.config.LEARNING_RATE, self.config.LOSS_FUNCTION, self.config.loss_file)
         print('Fitting SGT model...')
         mdl.fit(memory=sgt_memory, num_epochs=self.config.NUM_TRAIN_EPOCHS, shuffle_every_epoch=True)
-        # install mdl and thresholds to EMGClassifier
+        # install mdl and thresholds to EMGRegressor
         offline_regressor = libemg.emg_predictor.EMGRegressor(mdl)
         offline_regressor.install_feature_parameters(self.config.feature_dictionary)
         
-        # save EMGClassifier to file
+        # save EMGRegressor to file
         with open(self.config.sgt_model_file, 'wb') as handle:
             pickle.dump(offline_regressor, handle)
 
@@ -382,12 +382,8 @@ class Experiment:
         memory_id = 0
         num_memories = 0
 
-        # initial time
         start_time = time.perf_counter()
-
-        # variables to save and stuff
         adapt_round = 0
-        
         time.sleep(3)
         
         while (time.perf_counter() - start_time) < ADAPTATION_TIME:
@@ -433,7 +429,7 @@ class Experiment:
             except:
                 logging.error("ADAPTMANAGER: "+traceback.format_exc())
         else:
-            print("adapt_manager Finished!")
+            print("adapt_manager finished!")
             smm.modify_variable('memory_update_flag', lambda _: DONE_TASK)
             memory.write(self.config.data_directory, 1000)
             with open(self.config.adaptation_model_file, 'wb') as handle:
