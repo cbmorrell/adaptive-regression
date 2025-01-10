@@ -222,9 +222,9 @@ def make_pseudo_labels(environment_data, smm, approach, activation_threshold):
             outcome = 'P' if correct_direction and not in_target_runway else 'N'
             outcomes.append(outcome)
         outcomes = np.array(outcomes)
-        if approach == 'ciil':
+        if approach == 'uc-ciil':
             adaptation_labels = assign_ciil_label(prediction, optimal_direction, outcomes, is_below_threshold)
-        elif approach == 'oracle':
+        elif approach == 'o-ciil':
             adaptation_labels = np.copy(optimal_direction)
         else:
             raise ValueError(f"Unexpected value for approach. Got: {approach}.")
