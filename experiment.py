@@ -126,7 +126,8 @@ class Config:
             libemg.data_handler.RegexFilter('/', '/', [self.model], 'model_data')
         ]
         offdh.get_data(self.data_directory, regex_filters, metadata_fetchers, ",")
-        # assert len(offdh.data) == self.num_reps, f"Expected {self.num_reps} files, but found {len(offdh.data)}."
+        num_files = 2 * self.num_reps if self.use_combined_data else self.num_reps  # combined has num_reps=half of the files because it uses two videos
+        assert len(offdh.data) == num_files, f"Expected {num_files} files, but found {len(offdh.data)}."
         return offdh
 
 
