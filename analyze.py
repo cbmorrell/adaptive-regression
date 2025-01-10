@@ -122,6 +122,7 @@ class Plotter:
         data.update(metrics)
         data.update(trial_info)
         df = pd.DataFrame(data)
+        df.to_csv(self.results_path.joinpath('stats.csv'))
         x = 'Model'
         hue = 'Adaptive'
         palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]} # want "yes" to be green... assumes Dark2 color palette
