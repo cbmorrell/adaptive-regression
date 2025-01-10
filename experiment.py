@@ -19,9 +19,9 @@ from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labe
 from utils.data_collection import Device, collect_data, get_frame_coordinates
 
 
-MODELS = ('ciil', 'combined-sgt', 'oracle', 'within-sgt')
-ADAPTIVE_MODELS = (MODELS[0], MODELS[2])
-SGT_MODELS = (MODELS[1], MODELS[3])
+MODELS = ('within-sgt', 'combined-sgt', 'o-ciil', 'uc-ciil')
+SGT_MODELS = (MODELS[0], MODELS[1])
+ADAPTIVE_MODELS = (MODELS[2], MODELS[3])
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ def make_participant(path, dominant_hand, device, age, sex, experience):
     # Balanced latin square for 4 conditions
     conditions = np.array(MODELS)
     latin_square = np.array([
-        [0, 1, 2, 3],
+        [0, 1, 3, 2],
         [1, 2, 0, 3],
         [2, 3, 1, 0],
         [3, 0, 2, 1]
@@ -120,7 +120,7 @@ class Config:
             return x_path.parent == y_path.parent and x_path.name[2] == y_path.name[2]
 
         metadata_fetchers = [libemg.data_handler.FilePackager(libemg.data_handler.RegexFilter('/C_', ".txt", ['0', '1'], "labels"), package_function)]
-            
+        
         offdh = libemg.data_handler.OfflineDataHandler()
         regex_filters = [
             libemg.data_handler.RegexFilter("_R_","_emg.csv", [str(idx) for idx in range(self.num_reps)], "reps"),
