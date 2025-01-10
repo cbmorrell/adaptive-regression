@@ -14,7 +14,7 @@ import seaborn as sns
 
 from utils.adaptation import TIMEOUT, DWELL_TIME, Memory
 from utils.models import MLP
-from experiment import MODELS, Participant, make_config, ADAPTIVE_MODELS, Config
+from experiment import MODELS, Participant, make_config, Config
 
 
 class Plotter:
@@ -27,10 +27,9 @@ class Plotter:
         self.dpi = dpi
         self.stage = stage
         self.plot_adaptation = self.stage == 'adaptation'
+        self.models = MODELS
         if self.plot_adaptation:
-            self.models = (ADAPTIVE_MODELS[1], ADAPTIVE_MODELS[0])  # reorder based on best visual for plots (oracle, ciil)
-        else:
-            self.models = (MODELS[3], MODELS[1], MODELS[2], MODELS[0])  # reorder based on best visual for plots (within, combined, oracle, ciil)
+            self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
 
         self.results_path = Path('results', self.stage)
         if len(participants) == 1:
@@ -105,10 +104,11 @@ class Plotter:
                 #     # Group box plot based on within vs. combined DoF trials
                 #     logs.append(Log(log.path, 'within'))
                 #     logs.append(Log(log.path, 'combined'))
+                config = make_config(participant, model)
 
                 for log in logs:
                     trial_info['Model'].append(format_names(model))
-                    trial_info['Adaptive'].append('Yes' if model in ADAPTIVE_MODELS else 'No')
+                    trial_info['Adaptive'].append('Yes' if config.model_is_adaptive else 'No')
                     fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
                     metrics['Throughput'].append(np.mean(fitts_metrics['throughput']))
                     metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
