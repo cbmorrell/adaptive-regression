@@ -218,7 +218,7 @@ def make_pseudo_labels(environment_data, smm, approach, activation_threshold):
         outcomes = []
         for prediction_component, direction_component in zip(prediction, optimal_direction):
             correct_direction = np.sign(prediction_component) == np.sign(direction_component)
-            in_target_runway = np.abs(direction_component) <= TARGET_RADIUS
+            in_target_runway = np.abs(direction_component) <= (TARGET_RADIUS + CURSOR_RADIUS)
             outcome = 'P' if correct_direction and not in_target_runway else 'N'
             outcomes.append(outcome)
         outcomes = np.array(outcomes)
