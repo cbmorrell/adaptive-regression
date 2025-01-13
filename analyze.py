@@ -93,30 +93,26 @@ class Plotter:
         trial_info = {
             'Model': [],
             'Adaptive': [],
+            'Subject ID': []
         }
 
         fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(20, 8))
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
-                logs = [log]
-                # if not log.exclude_combined_dof_trials and not log.exclude_within_dof_trials:
-                #     # Group box plot based on within vs. combined DoF trials
-                #     logs.append(Log(log.path, 'within'))
-                #     logs.append(Log(log.path, 'combined'))
                 config = make_config(participant, model)
 
-                for log in logs:
-                    trial_info['Model'].append(format_names(model))
-                    trial_info['Adaptive'].append('Yes' if config.model_is_adaptive else 'No')
-                    fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
-                    metrics['Throughput (bit/s)'].append(np.mean(fitts_metrics['throughput']))
-                    metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
-                    metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
-                    metrics['# Trials'].append(fitts_metrics['num_trials'])
-                    metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
-                    metrics['Action Interference'].append(np.mean(fitts_metrics['action_interference']))
-                    metrics['Drift'].append(np.mean(fitts_metrics['drift']))
+                trial_info['Subject ID'].append(participant.id)
+                trial_info['Model'].append(format_names(model))
+                trial_info['Adaptive'].append('Yes' if config.model_is_adaptive else 'No')
+                fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
+                metrics['Throughput (bit/s)'].append(np.mean(fitts_metrics['throughput']))
+                metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
+                metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
+                metrics['# Trials'].append(fitts_metrics['num_trials'])
+                metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
+                metrics['Action Interference'].append(np.mean(fitts_metrics['action_interference']))
+                metrics['Drift'].append(np.mean(fitts_metrics['drift']))
 
         data = {}
         data.update(metrics)
