@@ -111,8 +111,8 @@ class Plotter:
                 metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
                 metrics['# Trials'].append(fitts_metrics['num_trials'])
                 metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
-                metrics['Action Interference'].append(np.mean(fitts_metrics['action_interference']))
-                metrics['Drift'].append(np.mean(fitts_metrics['drift']))
+                metrics['Action Interference'].append(np.nanmean(fitts_metrics['action_interference']))
+                metrics['Drift'].append(np.nanmean(fitts_metrics['drift']))
 
         data = {}
         data.update(metrics)
