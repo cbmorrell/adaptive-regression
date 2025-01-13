@@ -207,7 +207,9 @@ def make_pseudo_labels(environment_data, smm, approach, activation_threshold):
         return None
 
     num_majority_vote_windows = 5
-    is_below_threshold = np.mean(feature_data[:num_majority_vote_windows]) < activation_threshold
+    window_activations = np.mean(feature_data[:num_majority_vote_windows], axis=1)
+    is_below_threshold = np.sum(window_activations < activation_threshold) > (num_majority_vote_windows / 2)
+    # print(window_activations < activation_threshold, is_below_threshold)
     
     # find the predictions info: 
     prediction_data = smm.get_variable("model_output")
@@ -237,7 +239,7 @@ def make_pseudo_labels(environment_data, smm, approach, activation_threshold):
             # Normalize to correct magnitude - p = inf b/c (1, 1) should move the same speed as (1, 0)
             adaptation_labels *= distance_to_proportional_control(np.linalg.norm(optimal_direction)) / np.linalg.norm(adaptation_labels, ord=np.inf)
 
-    print(optimal_direction, outcomes, prediction, adaptation_labels, is_below_threshold)
+    # print(optimal_direction, outcomes, prediction, adaptation_labels)
     timestamp = [timestamp]
     adaptation_labels = torch.from_numpy(adaptation_labels).type(torch.float32).unsqueeze(0)
     adaptation_data = torch.tensor(features).type(torch.float32).unsqueeze(0)

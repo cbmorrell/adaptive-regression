@@ -449,7 +449,7 @@ class Experiment:
         sgt_memory = self.offdh_to_memory()
         nm_mask = torch.all(sgt_memory.experience_targets == 0, axis=1)
         nm_features = sgt_memory.experience_data[nm_mask]
-        activation_threshold = float(torch.mean(nm_features) + 0.5 * torch.std(nm_features))
+        activation_threshold = float(torch.mean(nm_features) + 0.2 * torch.std(nm_features))
 
         memory = Memory()   # initialize memory just for adaptation data
         start_time = time.perf_counter()
