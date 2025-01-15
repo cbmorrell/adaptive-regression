@@ -509,7 +509,8 @@ def format_names(models):
             ('Ciil', 'CIIL'),
             ('Within', 'W'),
             ('Combined', 'C'),
-            ('Subject-', 'S')
+            ('Subject-', 'S'),
+            ('Uc', 'UC')
         )
         formatted_name = name.title()
         for replacement in replacements:
