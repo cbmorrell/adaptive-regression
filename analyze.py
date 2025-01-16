@@ -47,32 +47,41 @@ class Plotter:
 
     def plot_fitts_metrics_over_time(self):
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots']
+        metrics = {
+            'Throughput (bits/s)': [],
+            'Path Efficiency (%)': [],
+            'Overshoots': []
+        }
+        trial_info = {
+            'Trials': [],
+            'Model': [],
+            'Time (seconds)': []
+        }
         fig, axs = plt.subplots(nrows=1, ncols=len(metrics), sharex=True, layout='constrained', figsize=(12, 6))
-        model_labels = []
-        throughputs = []
-        path_efficiencies = []
-        overshoots = []
-        trials = []
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 fitts_metrics = log.extract_fitts_metrics()
-                throughputs.extend(moving_average(fitts_metrics['throughput']))
-                path_efficiencies.extend(moving_average(fitts_metrics['efficiency']))
-                overshoots.extend(moving_average(fitts_metrics['overshoots']))
+                metrics['Throughput (bits/s)'].extend(moving_average(fitts_metrics['throughput']))
+                metrics['Path Efficiency (%)'].extend(moving_average(fitts_metrics['efficiency']))
+                metrics['Overshoots'].extend(moving_average(fitts_metrics['overshoots']))
                 num_trials = len(moving_average(fitts_metrics['throughput']))
-                trials.extend([idx + 1 for idx in range(num_trials)])
-                model_labels.extend([format_names(model) for _ in range(num_trials)])
+                # TODO: See how Evan did his throughput over time plot... when I use the timestamps none line up and then it's super noisy and no confidence intervals
+                # metrics['Throughput (bits/s)'].extend(fitts_metrics['throughput'])
+                # metrics['Path Efficiency (%)'].extend(fitts_metrics['efficiency'])
+                # metrics['Overshoots'].extend(fitts_metrics['overshoots'])
+                num_trials = len(fitts_metrics['throughput'])
+                trial_info['Trials'].extend([idx + 1 for idx in range(num_trials)])
+                trial_info['Model'].extend([format_names(model) for _ in range(num_trials)])
+                trial_info['Time (seconds)'].extend(fitts_metrics['time'])
+                
 
-        df = pd.DataFrame({
-            'Trials': trials,
-            'Model': model_labels,
-            metrics[0]: throughputs,
-            metrics[1]: path_efficiencies,
-            metrics[2]: overshoots
-        })
-        for metric, ax in zip(metrics, axs):
-            legend = 'auto' if metric == metrics[-1] else False
+        data = {}
+        data.update(metrics)
+        data.update(trial_info)
+        df = pd.DataFrame(data)
+        for metric, ax in zip(metrics.keys(), axs):
+            legend = 'auto' if metric == list(metrics.keys())[-1] else False
             sns.lineplot(df, x='Trials', y=metric, hue='Model', ax=ax, legend=legend)
 
         fig.suptitle('Fitts Metrics Over Time')
@@ -82,7 +91,7 @@ class Plotter:
     def plot_fitts_metrics(self):
         # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
         metrics = {
-            'Throughput (bit/s)': [],
+            'Throughput (bits/s)': [],
             'Path Efficiency (%)': [],
             'Overshoots': [],
             '# Trials': [],
@@ -106,7 +115,7 @@ class Plotter:
                 trial_info['Model'].append(format_names(model))
                 trial_info['Adaptive'].append('Yes' if config.model_is_adaptive else 'No')
                 fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
-                metrics['Throughput (bit/s)'].append(np.mean(fitts_metrics['throughput']))
+                metrics['Throughput (bits/s)'].append(np.mean(fitts_metrics['throughput']))
                 metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
                 metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
                 metrics['# Trials'].append(fitts_metrics['num_trials'])
@@ -392,9 +401,11 @@ class Log:
             'num_trials': -1,
             'completion_rate': -1,
             'action_interference': [],
-            'drift': []
+            'drift': [],
+            'time': []
         }
         
+        total_time = 0
         for t in trials:
             if t.is_timeout_trial:
                 fitts_results['timeouts'].append(t.trial_idx)
@@ -404,6 +415,9 @@ class Log:
             fitts_results['efficiency'].append(t.calculate_efficiency())
             fitts_results['action_interference'].append(t.calculate_action_interference())
             fitts_results['drift'].append(t.calculate_drift())
+
+            total_time += t.trial_time
+            fitts_results['time'].append(total_time)
 
         fitts_results['num_trials'] = len(trials)
         fitts_results['completion_rate'] = 1 - (len(fitts_results['timeouts']) / fitts_results['num_trials'])
