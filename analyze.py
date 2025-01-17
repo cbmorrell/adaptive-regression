@@ -62,10 +62,10 @@ class Plotter:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 fitts_metrics = log.extract_fitts_metrics()
-                metrics['Throughput (bits/s)'].extend(fitts_metrics['throughput'])
+                metrics['Throughput (bits/s)'].extend(moving_average(fitts_metrics['throughput']))
                 # metrics['Path Efficiency (%)'].extend(moving_average(fitts_metrics['efficiency']))
                 # metrics['Overshoots'].extend(moving_average(fitts_metrics['overshoots']))
-                num_trials = len(fitts_metrics['throughput'])
+                num_trials = len(moving_average(fitts_metrics['throughput']))
                 # TODO: See how Evan did his throughput over time plot... when I use the timestamps none line up (since each trial time is different) and then it's super noisy and no confidence intervals
                 # metrics['Throughput (bits/s)'].extend(fitts_metrics['throughput'])
                 # metrics['Path Efficiency (%)'].extend(fitts_metrics['efficiency'])
@@ -84,7 +84,7 @@ class Plotter:
         # for metric, ax in zip(metrics.keys(), axs):
             # legend = 'auto' if metric == list(metrics.keys())[-1] else False
             # sns.lineplot(df, x='Time (seconds)', y=metric, hue='Model', ax=ax, legend=legend)
-        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=axs, legend=True)
+        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=axs)
 
         fig.suptitle('Fitts Metrics Over Time')
         self._save_fig(fig, 'fitts-metrics-over-time.png')
@@ -457,10 +457,13 @@ class Trial:
         return fastest_path / distance_travelled
 
     def calculate_throughput(self):
-        trial_time = self.trial_time
-        if not self.is_timeout_trial:
-            # Only subtract dwell time for successful trials
-            trial_time -= DWELL_TIME
+        # trial_time = self.trial_time
+        # if not self.is_timeout_trial:
+        #     # Only subtract dwell time for successful trials
+        #     trial_time -= DWELL_TIME
+        if self.is_timeout_trial:
+            return 0
+        trial_time = self.trial_time - DWELL_TIME
         starting_cursor_position = self.cursor_positions[0]
         distance = math.dist(starting_cursor_position, self.target_position)
         id = math.log2(distance / self.target_width + 1)
