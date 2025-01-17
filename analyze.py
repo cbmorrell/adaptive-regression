@@ -240,6 +240,8 @@ class Plotter:
                 batch_timestamps = loss_df.iloc[:, 0]
                 batch_losses = loss_df.iloc[:, 1]
                 epoch_timestamps = np.unique(batch_timestamps)
+                if config.model_is_adaptive:
+                    assert len(epoch_timestamps) == config.NUM_TRAIN_EPOCHS, f"Unexpected number of epochs in loss file. Expected {config.NUM_TRAIN_EPOCHS}, but got: {len(epoch_timestamps)}."
                 epoch_losses = [np.mean(batch_losses[batch_timestamps == timestamp]) for timestamp in epoch_timestamps]
                 epochs.extend(list(range(len(epoch_timestamps))))
                 losses.extend(epoch_losses)
