@@ -464,7 +464,7 @@ class Trial:
             trial_time -= DWELL_TIME
         # if self.is_timeout_trial:
         #     return 0
-        trial_time = self.trial_time - DWELL_TIME
+        # trial_time = self.trial_time - DWELL_TIME
         starting_cursor_position = self.cursor_positions[0]
         distance = math.dist(starting_cursor_position, self.target_position)
         id = math.log2(distance / self.target_width + 1)
