@@ -240,8 +240,7 @@ class Plotter:
                 batch_timestamps = loss_df.iloc[:, 0]
                 batch_losses = loss_df.iloc[:, 1]
                 epoch_timestamps = np.unique(batch_timestamps)
-                if config.model_is_adaptive:
-                    assert len(epoch_timestamps) == config.NUM_TRAIN_EPOCHS, f"Unexpected number of epochs in loss file. Expected {config.NUM_TRAIN_EPOCHS}, but got: {len(epoch_timestamps)}."
+                assert (len(epoch_timestamps) == config.NUM_TRAIN_EPOCHS) or config.model_is_adaptive, f"Unexpected number of epochs in loss file. Expected {config.NUM_TRAIN_EPOCHS}, but got: {len(epoch_timestamps)}."
                 epoch_losses = [np.mean(batch_losses[batch_timestamps == timestamp]) for timestamp in epoch_timestamps]
                 epochs.extend(list(range(len(epoch_timestamps))))
                 losses.extend(epoch_losses)
@@ -459,12 +458,12 @@ class Trial:
         return fastest_path / distance_travelled
 
     def calculate_throughput(self):
-        # trial_time = self.trial_time
-        # if not self.is_timeout_trial:
-        #     # Only subtract dwell time for successful trials
-        #     trial_time -= DWELL_TIME
-        if self.is_timeout_trial:
-            return 0
+        trial_time = self.trial_time
+        if not self.is_timeout_trial:
+            # Only subtract dwell time for successful trials
+            trial_time -= DWELL_TIME
+        # if self.is_timeout_trial:
+        #     return 0
         trial_time = self.trial_time - DWELL_TIME
         starting_cursor_position = self.cursor_positions[0]
         distance = math.dist(starting_cursor_position, self.target_position)
