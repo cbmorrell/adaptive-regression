@@ -347,6 +347,36 @@ class Plotter:
         ax.set_title(f"Decision Stream ({self.stage})".title())
         self._save_fig(fig, 'decision-stream.png')
 
+    def plot_survey_results(self):
+        df = pd.read_csv(self.results_path.parent.joinpath('intra-survey-results.csv'))
+
+        questions = { 
+            'I had good control of isolated motions (e.g., move right)': 'Isolated',
+            'I had good control of combined motions (e.g., move up and right)': 'Combined',
+            'I could stop and stay at rest when I wanted to': 'Rest',
+            'I felt in control of the cursor': 'Control',
+            'I could control the speed well': 'Speed',
+            'The training phase was engaging': 'Training'
+        }
+        order = [
+            'Strongly agree',
+            'Agree',
+            'Neutral',
+            'Disgree',
+            'Strongly disagree'
+        ]
+         # Need to map to integers I think... categories aren't sorted correctly
+        fig, axs = plt.subplots(nrows=1, ncols=len(questions), layout='constrained', figsize=(16, 8), sharey=True)
+        for question_info, ax in zip(questions.items(), axs):
+            question, summary = question_info
+            legend = ax == axs[-1]
+            sns.countplot(df, y=question, order=order, hue='Condition', stat='percent', ax=ax, legend=legend)
+            ax.set_title(summary)
+            ax.set_ylabel(None)
+            ax.set_xlabel('Model')
+        self._save_fig(fig, 'survey.png')
+        # TODO: Probably end up doing horizontal stacked bar chart that Ethan showed
+
     def _save_fig(self, fig, filename):
         filepath = self.results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
@@ -574,10 +604,11 @@ def main():
         participants = str(args.participants).replace(' ', '').split(',')
 
     validation_plotter = Plotter(participants, stage='validation')
-    validation_plotter.plot_fitts_metrics()
-    validation_plotter.plot_fitts_metrics_over_time()
-    validation_plotter.plot_dof_activation_heatmap()
-    validation_plotter.plot_loss()
+    # validation_plotter.plot_fitts_metrics()
+    # validation_plotter.plot_fitts_metrics_over_time()
+    # validation_plotter.plot_dof_activation_heatmap()
+    # validation_plotter.plot_loss()
+    validation_plotter.plot_survey_results()
 
     adaptation_plotter = Plotter(participants, stage='adaptation')
     adaptation_plotter.plot_fitts_metrics_over_time()
