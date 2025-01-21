@@ -43,8 +43,8 @@ def main():
     if args.analyze:
         online_data_handler.analyze_hardware()
     
+    online_data_handler.visualize(num_samples=experiment.config.device.fs, block=True)
     if args.stage == 'sgt':
-        online_data_handler.visualize(num_samples=experiment.config.device.fs, block=True)
         experiment.start_sgt(online_data_handler)
     else:
         experiment.run_isofitts(online_data_handler)
