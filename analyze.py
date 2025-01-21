@@ -372,8 +372,8 @@ class Plotter:
             legend = ax == axs[-1]
             sns.countplot(df, y=question, order=order, hue='Condition', stat='percent', ax=ax, legend=legend)
             ax.set_title(summary)
+            ax.set_xlabel('Percent (%)')
             ax.set_ylabel(None)
-            ax.set_xlabel('Model')
         self._save_fig(fig, 'survey.png')
         # TODO: Probably end up doing horizontal stacked bar chart that Ethan showed
 
