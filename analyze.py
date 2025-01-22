@@ -95,7 +95,7 @@ class Plotter:
         metrics = {
             'Throughput (bits/s)': [],
             'Path Efficiency (%)': [],
-            'Overshoots': [],
+            'Overshoots per Trial': [],
             '# Trials': [],
             'Completion Rate (%)': [],
             'Action Interference': [],
@@ -119,7 +119,7 @@ class Plotter:
                 fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
                 metrics['Throughput (bits/s)'].append(np.mean(fitts_metrics['throughput']))
                 metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
-                metrics['Overshoots'].append(np.sum(fitts_metrics['overshoots']))
+                metrics['Overshoots per Trial'].append(np.mean(fitts_metrics['overshoots']))
                 metrics['# Trials'].append(fitts_metrics['num_trials'])
                 metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
                 metrics['Action Interference'].append(np.nanmean(fitts_metrics['action_interference']))
@@ -254,6 +254,7 @@ class Plotter:
         sns.lineplot(df, x='Epochs', y='Loss', hue='Model', ax=ax)
         fig.suptitle('Training Loss')
         self._save_fig(fig, 'loss.png')
+        # TODO: Plot vertical line at 150 epochs to show where SGT models stopped training
         return fig
 
     def plot_num_reps_wsgt(self):
