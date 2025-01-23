@@ -38,8 +38,6 @@ class Plotter:
 
         self.results_path = self.stage_agnostic_results_path.joinpath(self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
-        print(self.stage_agnostic_results_path)
-        print(self.results_path)
 
     def read_log(self, participant, model):
         config = make_config(participant, model)
@@ -260,13 +258,19 @@ class Plotter:
 
         df = pd.DataFrame({
             'Epochs': epochs,
-            'Loss': losses,
+            'L1 Loss': losses,
             'Model': model_labels
         })
-        sns.lineplot(df, x='Epochs', y='Loss', hue='Model', ax=ax)
+        sns.lineplot(df, x='Epochs', y='L1 Loss', hue='Model', ax=ax)
+        ax.axvline(Config.NUM_TRAIN_EPOCHS, color='black', linestyle='--', label='SGT Epochs')
+        ax.annotate('SGT Training Epochs', 
+             xy=(Config.NUM_TRAIN_EPOCHS, max(losses) - 0.05),
+             xytext=(Config.NUM_TRAIN_EPOCHS + 100, max(losses) - 0.05),  # offset for better placement
+             arrowprops=dict(arrowstyle='->', color='black'),
+             bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor='white'),
+             fontsize=10)
         fig.suptitle('Training Loss')
         self._save_fig(fig, 'loss.png', stage_agnostic=True)
-        # TODO: Plot vertical line at 150 epochs to show where SGT models stopped training
         return fig
 
     def plot_num_reps_wsgt(self):
