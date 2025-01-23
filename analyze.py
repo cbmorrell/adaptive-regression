@@ -9,6 +9,7 @@ import libemg
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.lines as mlines
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
@@ -133,12 +134,19 @@ class Plotter:
         x = 'Model'
         hue = 'Adaptive'
         palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]} # want "yes" to be green... assumes Dark2 color palette
+        meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
         for metric, ax in zip(metrics.keys(), axs):
             legend = 'auto' if ax == axs[-1] else False # only plot legend on last axis
             if len(self.participants) == 1:
                 sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette)
             else:
-                sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
+                sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
+                if ax == axs[0]:
+                    handles = [
+                        mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
+                        mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
+                    ]
+                    ax.legend(handles=handles, title='Symbols')
         
         fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, 'fitts-metrics.png')
