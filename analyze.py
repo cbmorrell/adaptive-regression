@@ -357,6 +357,9 @@ class Plotter:
         self._save_fig(fig, 'decision-stream.png')
 
     def plot_survey_results(self):
+        if len(self.participants) == 1:
+            print('Only 1 participant found - skipping plot of survey results.')
+            return
         df = pd.read_csv(self.results_path.parent.joinpath('intra-survey-results.csv'))
 
         questions = { 
