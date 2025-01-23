@@ -264,8 +264,8 @@ class Plotter:
         sns.lineplot(df, x='Epochs', y='L1 Loss', hue='Model', ax=ax)
         ax.axvline(Config.NUM_TRAIN_EPOCHS, color='black', linestyle='--', label='SGT Epochs')
         ax.annotate('SGT Training Epochs', 
-             xy=(Config.NUM_TRAIN_EPOCHS, max(losses) - 0.05),
-             xytext=(Config.NUM_TRAIN_EPOCHS + 100, max(losses) - 0.05),  # offset for better placement
+             xy=(Config.NUM_TRAIN_EPOCHS, ax.get_yticks()[-2]),
+             xytext=(Config.NUM_TRAIN_EPOCHS + 100, ax.get_yticks()[-2]),  # offset for better placement
              arrowprops=dict(arrowstyle='->', color='black'),
              bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor='white'),
              fontsize=10)
@@ -628,9 +628,9 @@ def main():
         participants = str(args.participants).replace(' ', '').split(',')
 
     validation_plotter = Plotter(participants, stage='validation')
-    validation_plotter.plot_fitts_metrics()
-    validation_plotter.plot_fitts_metrics_over_time()
-    validation_plotter.plot_dof_activation_heatmap()
+    # validation_plotter.plot_fitts_metrics()
+    # validation_plotter.plot_fitts_metrics_over_time()
+    # validation_plotter.plot_dof_activation_heatmap()
     validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
