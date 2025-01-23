@@ -32,10 +32,14 @@ class Plotter:
         if self.plot_adaptation:
             self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
 
-        self.results_path = Path('results', self.stage)
+        self.stage_agnostic_results_path = Path('results')
         if len(participants) == 1:
-            self.results_path = self.results_path.joinpath(self.participants[0].id)
+            self.stage_agnostic_results_path = self.stage_agnostic_results_path.joinpath(self.participants[0].id)
+
+        self.results_path = self.stage_agnostic_results_path.joinpath(self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
+        print(self.stage_agnostic_results_path)
+        print(self.results_path)
 
     def read_log(self, participant, model):
         config = make_config(participant, model)
@@ -261,7 +265,7 @@ class Plotter:
         })
         sns.lineplot(df, x='Epochs', y='Loss', hue='Model', ax=ax)
         fig.suptitle('Training Loss')
-        self._save_fig(fig, 'loss.png')
+        self._save_fig(fig, 'loss.png', stage_agnostic=True)
         # TODO: Plot vertical line at 150 epochs to show where SGT models stopped training
         return fig
 
@@ -301,7 +305,7 @@ class Plotter:
         df = pd.DataFrame(metrics)
         sns.boxplot(df, x='# reps', y='MAE', ax=ax)
         fig.suptitle('Impact of # Reps During Training for W-SGT')
-        self._save_fig(fig, 'offline.png')
+        self._save_fig(fig, 'offline.png', stage_agnostic=True)
         return fig
 
     def plot_prompt_labels(self):
@@ -386,11 +390,15 @@ class Plotter:
             ax.set_title(summary)
             ax.set_xlabel('Percent (%)')
             ax.set_ylabel(None)
-        self._save_fig(fig, 'survey.png')
+        self._save_fig(fig, 'survey.png', stage_agnostic=True)
         # TODO: Probably end up doing horizontal stacked bar chart that Ethan showed
 
-    def _save_fig(self, fig, filename):
-        filepath = self.results_path.joinpath(filename)
+    def _save_fig(self, fig, filename, stage_agnostic = False):
+        if stage_agnostic:
+            results_path = self.stage_agnostic_results_path
+        else:
+            results_path = self.results_path
+        filepath = results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
         print(f"File saved to {filepath.as_posix()}.")
 
