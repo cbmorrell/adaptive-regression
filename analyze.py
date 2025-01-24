@@ -18,6 +18,9 @@ from utils.models import MLP
 from experiment import MODELS, Participant, make_config, Config
 
 
+RESULTS_DIRECTORY = 'results'
+
+
 class Plotter:
     def __init__(self, participants, dpi = 400, stage = 'validation'):
         self.participants = []
@@ -32,7 +35,7 @@ class Plotter:
         if self.plot_adaptation:
             self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
 
-        self.stage_agnostic_results_path = Path('results')
+        self.stage_agnostic_results_path = Path(RESULTS_DIRECTORY)
         if len(participants) == 1:
             self.stage_agnostic_results_path = self.stage_agnostic_results_path.joinpath(self.participants[0].id)
 
@@ -368,34 +371,46 @@ class Plotter:
         if len(self.participants) == 1:
             print('Only 1 participant found - skipping plot of survey results.')
             return
-        df = pd.read_csv(self.results_path.parent.joinpath('intra-survey-results.csv'))
-
+        df = pd.read_csv(self.stage_agnostic_results_path.joinpath('intra-survey-results.csv'))
         questions = { 
-            'I had good control of isolated motions (e.g., move right)': 'Isolated',
-            'I had good control of combined motions (e.g., move up and right)': 'Combined',
-            'I could stop and stay at rest when I wanted to': 'Rest',
-            'I felt in control of the cursor': 'Control',
-            'I could control the speed well': 'Speed',
-            'The training phase was engaging': 'Training'
+            'I had good control of isolated motions (e.g., move right)',
+            'I had good control of combined motions (e.g., move up and right)',
+            'I could stop and stay at rest when I wanted to',
+            'I felt in control of the cursor',
+            'I could control the speed well',
+            'The training phase was engaging'
         }
-        order = [
+        responses = [
             'Strongly agree',
             'Agree',
             'Neutral',
-            'Disgree',
+            'Disagree',
             'Strongly disagree'
         ]
-         # Need to map to integers I think... categories aren't sorted correctly
-        fig, axs = plt.subplots(nrows=1, ncols=len(questions), layout='constrained', figsize=(16, 8), sharey=True)
-        for question_info, ax in zip(questions.items(), axs):
-            question, summary = question_info
-            legend = ax == axs[-1]
-            sns.countplot(df, y=question, order=order, hue='Condition', stat='percent', ax=ax, legend=legend)
-            ax.set_title(summary)
-            ax.set_xlabel('Percent (%)')
-            ax.set_ylabel(None)
+
+        columns = responses + ['Model', 'Question']
+        fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(12, 8), sharex=True, sharey=True)
+        for question, ax in zip(questions, np.ravel(axs)):
+            data = {column: [] for column in columns}
+
+            for model in MODELS:
+                model_mask = df['Condition'] == format_names(model)
+                data['Model'].append(format_names(model))
+                data['Question'].append(question)
+                counts = df[model_mask][question].value_counts()
+                for response in responses:
+                    if response not in counts:
+                        count = 0
+                    else:
+                        count = counts[response]
+                    data[response].append(count)
+
+            question_df = pd.DataFrame(data)
+            question_df.plot.barh(x='Model', stacked=True, ax=ax, legend=False)
+            ax.set_title(question)
+
+        fig.legend(loc='outside right')
         self._save_fig(fig, 'survey.png', stage_agnostic=True)
-        # TODO: Probably end up doing horizontal stacked bar chart that Ethan showed
 
     def _save_fig(self, fig, filename, stage_agnostic = False):
         if stage_agnostic:
@@ -628,9 +643,9 @@ def main():
         participants = str(args.participants).replace(' ', '').split(',')
 
     validation_plotter = Plotter(participants, stage='validation')
-    # validation_plotter.plot_fitts_metrics()
-    # validation_plotter.plot_fitts_metrics_over_time()
-    # validation_plotter.plot_dof_activation_heatmap()
+    validation_plotter.plot_fitts_metrics()
+    validation_plotter.plot_fitts_metrics_over_time()
+    validation_plotter.plot_dof_activation_heatmap()
     validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
