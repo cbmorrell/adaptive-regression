@@ -182,8 +182,8 @@ class Plotter:
 
     def plot_dof_activation_heatmap(self):
         # Create heatmap where x is DOF 1 and y is DOF2
-        fig = plt.figure(figsize=(20, 5), constrained_layout=True)
-        outer_grid = fig.add_gridspec(nrows=1, ncols=len(self.models))
+        fig = plt.figure(figsize=(8, 8), constrained_layout=True)
+        outer_grid = fig.add_gridspec(nrows=2, ncols=2)
         width_ratios = [2, 1]
         height_ratios = [1, 2]
         bins = np.round(np.arange(-1.1, 1.2, 0.2), 2)  # extend past 1 to include 1 in arange
@@ -233,11 +233,15 @@ class Plotter:
             x_hist_ax.set_ylabel('Frequency')
             y_hist_ax.set_xlabel('Frequency')
             x_hist_ax.set_yscale('log')
+            x_hist_ax.minorticks_off()
             y_hist_ax.set_xscale('log')
-            text_x = y_hist_ax.get_position().x0
+            y_hist_ax.minorticks_off()
+            # text_x = y_hist_ax.get_position().x0
+            text_x = x_hist_ax.get_position().x1 + 0.01
             text_y = x_hist_ax.get_position().y0
             fig.text(text_x, text_y, f"Simultaneity: {100 * simultaneity:.1f}%",
-                     ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
+                     ha='left', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
+            
 
         fig.suptitle('Activation Heatmap')
         self._save_fig(fig, 'heatmap.png')
