@@ -182,13 +182,16 @@ class Plotter:
 
     def plot_dof_activation_heatmap(self):
         # Create heatmap where x is DOF 1 and y is DOF2
-        fig = plt.figure(figsize=(8, 8), constrained_layout=True)
+        fig = plt.figure(figsize=(10, 10), constrained_layout=True)
         outer_grid = fig.add_gridspec(nrows=2, ncols=2)
         width_ratios = [2, 1]
         height_ratios = [1, 2]
         bins = np.round(np.arange(-1.1, 1.2, 0.2), 2)  # extend past 1 to include 1 in arange
-        ticks = np.arange(bins.shape[0])
+        bin_ticks = np.arange(bins.shape[0])
+        hist_ticks = np.array([1e2, 1e3, 1e4, 1e5])
         bbox = {'boxstyle': 'round'}
+        x_hist_axs = []
+        y_hist_axs = []
         for model_idx, model in enumerate(self.models):
             model_predictions = []
             for participant in self.participants:
@@ -205,6 +208,8 @@ class Plotter:
             x_hist_ax = axs[0, 0]
             y_hist_ax = axs[1, 1]
             axs[0, 1].set_axis_off()    # hide unused axis
+            x_hist_axs.append(x_hist_ax)
+            y_hist_axs.append(y_hist_ax)
 
             # Plot
             # nm_mask = np.all(np.abs(model_predictions) < bins[bins.shape[0] // 2], axis=1)
@@ -223,25 +228,32 @@ class Plotter:
             colorbar = heatmap.collections[0].colorbar
             colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
             colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
-            heatmap_ax.set_xticks(ticks, bins, rotation=90)
-            heatmap_ax.set_yticks(ticks, np.flip(bins), rotation=0)
+            heatmap_ax.set_xticks(bin_ticks, bins, rotation=90)
+            heatmap_ax.set_yticks(bin_ticks, np.flip(bins), rotation=0)
             heatmap_ax.set_xlabel('Open / Close Activation')
             heatmap_ax.set_ylabel('Pro / Supination Activation')
-            x_hist_ax.set_xticks(bins, bins, rotation=90)
-            y_hist_ax.set_yticks(bins, bins, rotation=0)
+            x_hist_ax.set_xticks([])    # in line with heatmap, so ticks aren't needed
+            x_hist_ax.set_xlim(bins[0], bins[-1])
+            y_hist_ax.set_yticks([])    # in line with heatmap, so ticks aren't needed
+            y_hist_ax.set_ylim(bins[0], bins[-1])
             x_hist_ax.set_title(format_names(model))
             x_hist_ax.set_ylabel('Frequency')
             y_hist_ax.set_xlabel('Frequency')
             x_hist_ax.set_yscale('log')
+            x_hist_ax.set_yticks(hist_ticks)
             x_hist_ax.minorticks_off()
             y_hist_ax.set_xscale('log')
+            y_hist_ax.set_xticks(hist_ticks)
             y_hist_ax.minorticks_off()
-            # text_x = y_hist_ax.get_position().x0
-            text_x = x_hist_ax.get_position().x1 + 0.01
+            text_x = y_hist_ax.get_position().x0
             text_y = x_hist_ax.get_position().y0
             fig.text(text_x, text_y, f"Simultaneity: {100 * simultaneity:.1f}%",
-                     ha='left', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
+                     ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
             
+        # Need to go through and align all histogram axes with eachother for consistent dimensions across subgrids
+        for x_hist_ax, y_hist_ax in zip(x_hist_axs, y_hist_axs):
+            x_hist_ax.sharey(x_hist_axs[0])
+            y_hist_ax.sharex(y_hist_axs[0])
 
         fig.suptitle('Activation Heatmap')
         self._save_fig(fig, 'heatmap.png')
