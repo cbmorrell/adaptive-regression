@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
@@ -398,15 +399,15 @@ class Plotter:
             'I could control the speed well',
             'The training phase was engaging'
         }
-        responses = [
-            'Strongly agree',
-            'Agree',
-            'Neutral',
-            'Disagree',
-            'Strongly disagree'
-        ]
+        responses = {
+            'Strongly disagree': '#cb181d',
+            'Disagree': '#67000d',
+            'Neutral': '#000000',
+            'Agree': '#00441b',
+            'Strongly agree': '#238b45'
+        }
 
-        columns = responses + ['Model', 'Question']
+        columns = list(responses.keys()) + ['Model', 'Question']
         fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(12, 8), sharex=True, sharey=True)
         for question, ax in zip(questions, np.ravel(axs)):
             data = {column: [] for column in columns}
@@ -416,7 +417,7 @@ class Plotter:
                 data['Model'].append(format_names(model))
                 data['Question'].append(question)
                 counts = df[model_mask][question].value_counts()
-                for response in responses:
+                for response in responses.keys():
                     if response not in counts:
                         count = 0
                     else:
@@ -424,10 +425,12 @@ class Plotter:
                     data[response].append(count)
 
             question_df = pd.DataFrame(data)
-            question_df.plot.barh(x='Model', stacked=True, ax=ax, legend=False)
+            question_df.plot.barh(x='Model', stacked=True, ax=ax, legend=False, color=responses)
             ax.set_title(question)
 
-        fig.legend(loc='outside right')
+        fig.suptitle('Survey Results')
+        handles = [mpatches.Patch(color=color, label=label) for label, color in responses.items()]
+        fig.legend(handles=handles, ncols=len(responses), loc='outside lower center')
         self._save_fig(fig, 'survey.png', stage_agnostic=True)
 
     def _save_fig(self, fig, filename, stage_agnostic = False):
@@ -661,10 +664,10 @@ def main():
         participants = str(args.participants).replace(' ', '').split(',')
 
     validation_plotter = Plotter(participants, stage='validation')
-    validation_plotter.plot_fitts_metrics()
-    validation_plotter.plot_fitts_metrics_over_time()
-    validation_plotter.plot_dof_activation_heatmap()
-    validation_plotter.plot_loss()
+    # validation_plotter.plot_fitts_metrics()
+    # validation_plotter.plot_fitts_metrics_over_time()
+    # validation_plotter.plot_dof_activation_heatmap()
+    # validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
     adaptation_plotter = Plotter(participants, stage='adaptation')
