@@ -234,8 +234,10 @@ class Plotter:
             y_hist_ax.set_xlabel('Frequency')
             x_hist_ax.set_yscale('log')
             y_hist_ax.set_xscale('log')
-            axs[0, 1].text(0, 0.5, f"% Simultaneity: {100 * simultaneity:.1f}", size=12, ha='center', va='center', bbox=bbox)
-            # This text box isn't perfect... it still shrinks the heatmap a bit
+            text_x = y_hist_ax.get_position().x0
+            text_y = x_hist_ax.get_position().y0
+            fig.text(text_x, text_y, f"Simultaneity: {100 * simultaneity:.1f}%",
+                     ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
 
         fig.suptitle('Activation Heatmap')
         self._save_fig(fig, 'heatmap.png')
