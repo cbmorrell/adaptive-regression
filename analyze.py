@@ -389,11 +389,11 @@ class Plotter:
             'The training phase was engaging'
         ]
         responses = {
-            'Strongly disagree': '#cb181d',
-            'Disagree': '#67000d',
+            'Strongly agree': '#00ff00',
+            'Agree': '#008800',
             'Neutral': '#000000',
-            'Agree': '#00441b',
-            'Strongly agree': '#238b45'
+            'Disagree': '#880000',
+            'Strongly disagree': '#ff0000',
         }
 
         columns = list(responses.keys()) + ['Model', 'Question']
