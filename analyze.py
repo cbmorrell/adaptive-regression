@@ -44,6 +44,9 @@ class Plotter:
         self.results_path = self.stage_agnostic_results_path.joinpath(self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
+        self.palette = sns.color_palette()
+        self.model_palette = {format_names(model): color for model, color in zip(MODELS, self.palette)} # loop over all models to keep consistent colors for all plots
+
     def read_log(self, participant, model):
         config = make_config(participant, model)
         if self.plot_adaptation:
@@ -72,13 +75,12 @@ class Plotter:
                 
 
         df = pd.DataFrame(data)
-        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=ax)
+        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=ax, palette=self.model_palette)
         ax.set_title(f"Throughput Over {self.stage} Period".title())
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
 
     def plot_fitts_metrics(self):
-        # TODO: Based on metrics over time plot, maybe say the first 20 trials are warm-up and the rest are validation?
         metrics = {
             'Throughput (bits/s)': [],
             'Path Efficiency (%)': [],
@@ -123,7 +125,7 @@ class Plotter:
         metric_axs = [ax for ax in axs if ax != legend_ax] # don't loop over legend axis
         x = 'Model'
         hue = 'Adaptive'
-        palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]} # want "yes" to be green... assumes Dark2 color palette
+        palette = {'Yes': self.palette[0], 'No': self.palette[1]} # want "yes" to be green... assumes Dark2 color palette
         meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
         for metric, ax in zip(metrics.keys(), metric_axs):
             legend = 'auto' if ax == axs[0] else False # only plot legend on last axis
@@ -272,7 +274,7 @@ class Plotter:
             'L1 Loss': losses,
             'Model': model_labels
         })
-        sns.lineplot(df, x='Epochs', y='L1 Loss', hue='Model', ax=ax)
+        sns.lineplot(df, x='Epochs', y='L1 Loss', hue='Model', ax=ax, palette=self.model_palette)
         ax.axvline(Config.NUM_TRAIN_EPOCHS, color='black', linestyle='--', label='SGT Epochs')
         ax.annotate('SGT Training Epochs', 
              xy=(Config.NUM_TRAIN_EPOCHS, ax.get_yticks()[-2]),
