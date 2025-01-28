@@ -114,8 +114,7 @@ class Plotter:
             'Subject ID': []
         }
 
-        fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=(12, 8))
-        axs = np.ravel(axs)   # flatten array - don't need it in a grid
+        fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=(12, 8), sharex=True)
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
@@ -138,26 +137,30 @@ class Plotter:
         data.update(trial_info)
         df = pd.DataFrame(data)
         df.to_csv(self.results_path.joinpath('stats.csv'))
+
+        axs = np.ravel(axs)   # flatten array - don't need it in a grid
+        legend_ax = axs[3]   # axis that will show legends instead of data - top right in this case
+        metric_axs = [ax for ax in axs if ax != legend_ax] # don't loop over legend axis
         x = 'Model'
         hue = 'Adaptive'
         palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]} # want "yes" to be green... assumes Dark2 color palette
         meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
-        for metric, ax in zip(metrics.keys(), axs):
+        for metric, ax in zip(metrics.keys(), metric_axs):
             legend = 'auto' if ax == axs[0] else False # only plot legend on last axis
             if len(self.participants) == 1:
                 sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette)
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
 
-        axs[-1].axis('off')
+        legend_ax.axis('off')
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
             mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
         ]
-        symbol_legend = axs[-1].legend(handles=symbol_handles, title='Symbols')
+        symbol_legend = legend_ax.legend(handles=symbol_handles, title='Symbols', loc='lower right')
         color_legend = axs[0].get_legend()
-        axs[-1].legend(handles=color_legend.legend_handles, title='Adaptive', loc='upper left')
-        axs[-1].add_artist(symbol_legend)
+        legend_ax.legend(handles=color_legend.legend_handles, title='Adaptive', loc='lower left')
+        legend_ax.add_artist(symbol_legend)
         color_legend.remove()
 
         fig.suptitle('Online Usability Metrics')
