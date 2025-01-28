@@ -114,7 +114,8 @@ class Plotter:
             'Subject ID': []
         }
 
-        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), layout='constrained', figsize=(20, 8))
+        fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=(12, 8))
+        axs = np.ravel(axs)   # flatten array - don't need it in a grid
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
@@ -142,18 +143,23 @@ class Plotter:
         palette = {'Yes': sns.color_palette()[0], 'No': sns.color_palette()[1]} # want "yes" to be green... assumes Dark2 color palette
         meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
         for metric, ax in zip(metrics.keys(), axs):
-            legend = 'auto' if ax == axs[-1] else False # only plot legend on last axis
+            legend = 'auto' if ax == axs[0] else False # only plot legend on last axis
             if len(self.participants) == 1:
                 sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette)
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
-                if ax == axs[0]:
-                    handles = [
-                        mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
-                        mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
-                    ]
-                    ax.legend(handles=handles, title='Symbols')
-        
+
+        axs[-1].axis('off')
+        symbol_handles = [
+            mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
+            mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
+        ]
+        symbol_legend = axs[-1].legend(handles=symbol_handles, title='Symbols')
+        color_legend = axs[0].get_legend()
+        axs[-1].legend(handles=color_legend.legend_handles, title='Adaptive', loc='upper left')
+        axs[-1].add_artist(symbol_legend)
+        color_legend.remove()
+
         fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, 'fitts-metrics.png')
         return fig
