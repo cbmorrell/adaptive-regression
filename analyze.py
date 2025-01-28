@@ -417,7 +417,7 @@ class Plotter:
         }
 
         columns = list(responses.keys()) + ['Model', 'Question']
-        fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(12, 8), sharex=True, sharey=True)
+        fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(10, 6), sharex=True, sharey=True)
         for question, ax in zip(questions, np.ravel(axs)):
             data = {column: [] for column in columns}
 
@@ -674,10 +674,10 @@ def main():
 
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     validation_plotter = Plotter(participants, stage='validation')
-    validation_plotter.plot_fitts_metrics()
-    validation_plotter.plot_fitts_metrics_over_time()
-    validation_plotter.plot_dof_activation_heatmap()
-    validation_plotter.plot_loss()
+    # validation_plotter.plot_fitts_metrics()
+    # validation_plotter.plot_fitts_metrics_over_time()
+    # validation_plotter.plot_dof_activation_heatmap()
+    # validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
     adaptation_plotter = Plotter(participants, stage='adaptation')
