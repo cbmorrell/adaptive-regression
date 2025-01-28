@@ -81,6 +81,7 @@ class Plotter:
         return fig
 
     def plot_fitts_metrics(self):
+        # TODO: Add significance test results to boxplot https://rowannicholls.github.io/python/graphs/ax_based/boxplots_significance.html
         metrics = {
             'Throughput (bits/s)': [],
             'Path Efficiency (%)': [],
