@@ -52,48 +52,35 @@ class Plotter:
 
         return Log(fitts_file)
 
-    def plot_fitts_metrics_over_time(self):
+    def plot_throughput_over_time(self):
         metrics = ['Throughput', 'Path Efficiency', 'Overshoots']
         metrics = {
             'Throughput (bits/s)': [],
-            # 'Path Efficiency (%)': [],
-            # 'Overshoots': []
         }
         trial_info = {
             'Trials': [],
             'Model': [],
-            # 'Time (seconds)': []
         }
-        fig, axs = plt.subplots(nrows=1, ncols=len(metrics), sharex=True, layout='constrained', figsize=(12, 6))
+        fig, ax = plt.subplots(nrows=1, ncols=len(metrics), sharex=True, layout='constrained', figsize=(6, 4))
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 fitts_metrics = log.extract_fitts_metrics()
                 metrics['Throughput (bits/s)'].extend(moving_average(fitts_metrics['throughput']))
-                # metrics['Path Efficiency (%)'].extend(moving_average(fitts_metrics['efficiency']))
-                # metrics['Overshoots'].extend(moving_average(fitts_metrics['overshoots']))
                 num_trials = len(moving_average(fitts_metrics['throughput']))
                 # TODO: See how Evan did his throughput over time plot... when I use the timestamps none line up (since each trial time is different) and then it's super noisy and no confidence intervals
-                # metrics['Throughput (bits/s)'].extend(fitts_metrics['throughput'])
-                # metrics['Path Efficiency (%)'].extend(fitts_metrics['efficiency'])
-                # metrics['Overshoots'].extend(fitts_metrics['overshoots'])
-                # num_trials = len(fitts_metrics['throughput'])
                 trial_info['Trials'].extend([idx + 1 for idx in range(num_trials)])
                 trial_info['Model'].extend([format_names(model) for _ in range(num_trials)])
-                # trial_info['Time (seconds)'].extend(fitts_metrics['time'])
-                # trial_info['Time (seconds)'].extend(np.linspace(start=0, stop=250, num=num_trials)) # this is wrong because we're throwing out a certain # trials...
                 
 
         data = {}
         data.update(metrics)
         data.update(trial_info)
         df = pd.DataFrame(data)
-        # for metric, ax in zip(metrics.keys(), axs):
-            # legend = 'auto' if metric == list(metrics.keys())[-1] else False
-            # sns.lineplot(df, x='Time (seconds)', y=metric, hue='Model', ax=ax, legend=legend)
-        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=axs)
+        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=ax)
 
-        fig.suptitle('Fitts Metrics Over Time')
+        ax.set_title(f"Throughput Over {self.stage} Period".title())
+        plt.show()
         self._save_fig(fig, 'fitts-metrics-over-time.png')
         return fig
 
@@ -675,13 +662,13 @@ def main():
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     validation_plotter = Plotter(participants, stage='validation')
     validation_plotter.plot_fitts_metrics()
-    validation_plotter.plot_fitts_metrics_over_time()
+    validation_plotter.plot_throughput_over_time()
     validation_plotter.plot_dof_activation_heatmap()
     validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
     adaptation_plotter = Plotter(participants, stage='adaptation')
-    adaptation_plotter.plot_fitts_metrics_over_time()
+    adaptation_plotter.plot_throughput_over_time()
     
     plt.show()
     print('-------------Analysis complete!-------------')
