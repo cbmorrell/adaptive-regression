@@ -2,6 +2,7 @@ from pathlib import Path
 import math
 import pickle
 from argparse import ArgumentParser
+import textwrap
 
 import torch
 import pandas as pd
@@ -387,14 +388,14 @@ class Plotter:
             print('Only 1 participant found - skipping plot of survey results.')
             return
         df = pd.read_csv(self.stage_agnostic_results_path.joinpath('intra-survey-results.csv'))
-        questions = { 
+        questions = [ 
             'I had good control of isolated motions (e.g., move right)',
             'I had good control of combined motions (e.g., move up and right)',
             'I could stop and stay at rest when I wanted to',
             'I felt in control of the cursor',
             'I could control the speed well',
             'The training phase was engaging'
-        }
+        ]
         responses = {
             'Strongly disagree': '#cb181d',
             'Disagree': '#67000d',
@@ -404,7 +405,7 @@ class Plotter:
         }
 
         columns = list(responses.keys()) + ['Model', 'Question']
-        fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(10, 6), sharex=True, sharey=True)
+        fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(8, 6), sharex=True, sharey=True)
         for question, ax in zip(questions, np.ravel(axs)):
             data = {column: [] for column in columns}
 
@@ -422,12 +423,13 @@ class Plotter:
 
             question_df = pd.DataFrame(data)
             question_df.plot.barh(x='Model', stacked=True, ax=ax, legend=False, color=responses)
-            ax.set_title(question)
+            ax.set_title(textwrap.fill(question, width=40))
 
         fig.suptitle('Survey Results')
         handles = [mpatches.Patch(color=color, label=label) for label, color in responses.items()]
         fig.legend(handles=handles, ncols=len(responses), loc='outside lower center')
         self._save_fig(fig, 'survey.png', stage_agnostic=True)
+        return fig
 
     def _save_fig(self, fig, filename, stage_agnostic = False):
         if stage_agnostic:
