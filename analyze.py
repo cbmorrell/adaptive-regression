@@ -300,7 +300,7 @@ class Plotter:
              arrowprops=dict(arrowstyle='->', color='black'),
              bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor='white'),
              fontsize=10)
-        fig.suptitle('Training Loss')
+        ax.set_title('Training Loss')
         self._save_fig(fig, 'loss.png', stage_agnostic=True)
         return fig
 
@@ -674,10 +674,10 @@ def main():
 
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     validation_plotter = Plotter(participants, stage='validation')
-    # validation_plotter.plot_fitts_metrics()
-    # validation_plotter.plot_fitts_metrics_over_time()
-    # validation_plotter.plot_dof_activation_heatmap()
-    # validation_plotter.plot_loss()
+    validation_plotter.plot_fitts_metrics()
+    validation_plotter.plot_fitts_metrics_over_time()
+    validation_plotter.plot_dof_activation_heatmap()
+    validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
     adaptation_plotter = Plotter(participants, stage='adaptation')
