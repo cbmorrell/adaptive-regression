@@ -88,7 +88,8 @@ class Plotter:
             '# Trials': [],
             'Completion Rate (%)': [],
             'Action Interference': [],
-            'Drift': []
+            'Drift': [],
+            'Cost of Simultaneity': []
         }
         trial_info = {
             'Model': [],
@@ -113,6 +114,7 @@ class Plotter:
                 metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
                 metrics['Action Interference'].append(np.nanmean(fitts_metrics['action_interference']))
                 metrics['Drift'].append(np.nanmean(fitts_metrics['drift']))
+                metrics['Cost of Simultaneity'].append(np.mean(fitts_metrics['cost_of_simultaneity']))
 
         data = {}
         data.update(metrics)
@@ -121,29 +123,25 @@ class Plotter:
         df.to_csv(self.results_path.joinpath('stats.csv'))
 
         axs = np.ravel(axs)   # flatten array - don't need it in a grid
-        legend_ax = axs[3]   # axis that will show legends instead of data - top right in this case
-        metric_axs = [ax for ax in axs if ax != legend_ax] # don't loop over legend axis
         x = 'Model'
         hue = 'Adaptive'
-        palette = {'Yes': self.palette[0], 'No': self.palette[1]} # want "yes" to be green... assumes Dark2 color palette
+        palette = {'Yes': self.palette[0], 'No': self.palette[1]} # want "yes" to be green (assumes Dark2 color palette)
         meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
-        for metric, ax in zip(metrics.keys(), metric_axs):
-            legend = 'auto' if ax == axs[0] else False # only plot legend on last axis
+        for metric, ax in zip(metrics.keys(), axs):
+            legend = 'auto' if ax == axs[3] else False # only plot legend on last axis
             if len(self.participants) == 1:
                 sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette)
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
 
-        legend_ax.axis('off')
+            if legend:
+                sns.move_legend(ax, loc='upper left', bbox_to_anchor=(1, 1))
+
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
             mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
         ]
-        symbol_legend = legend_ax.legend(handles=symbol_handles, title='Symbols', loc='lower right')
-        color_legend = axs[0].get_legend()
-        legend_ax.legend(handles=color_legend.legend_handles, title='Adaptive', loc='lower left')
-        legend_ax.add_artist(symbol_legend)
-        color_legend.remove()
+        axs[-1].legend(handles=symbol_handles, title='Symbols', loc='lower left', bbox_to_anchor=(1, 0))
 
         fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, 'fitts-metrics.png')
@@ -489,7 +487,8 @@ class Log:
             'completion_rate': -1,
             'action_interference': [],
             'drift': [],
-            'time': []
+            'time': [],
+            'cost_of_simultaneity': []
         }
         
         total_time = 0
@@ -502,6 +501,7 @@ class Log:
             fitts_results['efficiency'].append(t.calculate_efficiency())
             fitts_results['action_interference'].append(t.calculate_action_interference())
             fitts_results['drift'].append(t.calculate_drift())
+            fitts_results['cost_of_simultaneity'].append(t.calculate_cost_of_simultaneity())
 
             total_time += t.trial_time
             fitts_results['time'].append(total_time)
@@ -529,7 +529,7 @@ class Trial:
         self.clock_timestamps = run_log['global_clock'][trial_mask]
         self.prediction_timestamps = run_log['time_stamp'][trial_mask]
         model_output = run_log['class_label'][trial_mask]
-        self.predictions = [list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_output]
+        self.predictions = np.array([list(map(float, model_output.replace('[', '').replace(']', '').split(','))) for model_output in model_output])
         self.trial_time = self.clock_timestamps[-1] - self.clock_timestamps[0]
         self.is_timeout_trial = self.trial_time >= (TIMEOUT * 0.98)   # account for rounding errors
     
@@ -546,9 +546,6 @@ class Trial:
         if not self.is_timeout_trial:
             # Only subtract dwell time for successful trials
             trial_time -= DWELL_TIME
-        # if self.is_timeout_trial:
-        #     return 0
-        # trial_time = self.trial_time - DWELL_TIME
         starting_cursor_position = self.cursor_positions[0]
         distance = math.dist(starting_cursor_position, self.target_position)
         id = math.log2(distance / self.target_width + 1)
@@ -587,6 +584,15 @@ class Trial:
             # Can't determine drift for this trial - exclude it
             return np.nan
         return np.mean(drift_predictions)
+
+    def calculate_cost_of_simultaneity(self):
+        simultaneous_mask = np.all(np.abs(self.predictions) > 1e-3, axis=1)    # predictions are never exactly 0
+        simultaneity = np.sum(simultaneous_mask) / self.predictions.shape[0]
+        # return 1 - (simultaneity * self.calculate_efficiency() * (1 - self.calculate_action_interference()))
+        # return self.calculate_throughput() * (self.calculate_action_interference() + self.calculate_drift() + (1 - self.calculate_efficiency()))
+        # return self.calculate_efficiency() / simultaneity
+        # return simultaneity / (self.calculate_efficiency() * self.calculate_throughput())
+        return simultaneity / self.calculate_efficiency()
 
 
 def moving_average(a, window_size = 3):
