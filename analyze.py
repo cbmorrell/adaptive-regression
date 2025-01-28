@@ -425,6 +425,8 @@ class Plotter:
             question_df.plot.barh(x='Model', stacked=True, ax=ax, legend=False, color=responses)
             ax.set_title(textwrap.fill(question, width=40))
 
+        axs[0, 0].set_xticks(np.arange(0, axs[0, 0].get_xlim()[1]))
+        axs[0, 0].minorticks_off()
         fig.suptitle('Survey Results')
         handles = [mpatches.Patch(color=color, label=label) for label, color in responses.items()]
         fig.legend(handles=handles, ncols=len(responses), loc='outside lower center')
