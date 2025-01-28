@@ -135,14 +135,14 @@ class Plotter:
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
 
-            if legend:
-                sns.move_legend(ax, loc='upper left', bbox_to_anchor=(1, 1))
-
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
             mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
         ]
-        axs[-1].legend(handles=symbol_handles, title='Symbols', loc='lower left', bbox_to_anchor=(1, 0))
+        fig.legend(handles=symbol_handles, title='Symbols', loc='outside upper left', ncols=len(symbol_handles))
+        color_legend = axs[3].get_legend()
+        fig.legend(handles=color_legend.legend_handles, title='Adaptive', loc='outside upper right', ncols=len(color_legend.legend_handles))
+        color_legend.remove()
 
         fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, 'fitts-metrics.png')
