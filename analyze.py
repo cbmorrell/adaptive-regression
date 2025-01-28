@@ -25,11 +25,7 @@ RESULTS_DIRECTORY = 'results'
 
 class Plotter:
     def __init__(self, participants, dpi = 400, stage = 'validation'):
-        self.participants = []
-        for participant_id in participants:
-            participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
-            assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
-            self.participants.append(Participant.load(participant_files[0]))
+        self.participants = participants
         self.dpi = dpi
         self.stage = stage
         self.plot_adaptation = self.stage == 'adaptation'
@@ -648,6 +644,22 @@ def plot_pilot_distance_vs_proportional_control():
     plt.scatter(distances, predictions)
 
 
+def calculate_participant_metrics(participants):
+    ages = []
+    males = 0
+    females = 0
+    for participant in participants:
+        ages.append(participant.age)
+        if participant.sex == 'M':
+            males += 1
+        elif participant.sex == 'F':
+            females += 1
+        else:
+            raise ValueError(f"Unexpected value for participant.sex. Got: {participant.sex}.")
+    
+    print(f"Age: {min(ages)}-{max(ages)}\tM: {males}\tF: {females}")
+
+
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
@@ -659,11 +671,19 @@ def main():
     if args.participants == 'all':
         regex_filter = libemg.data_handler.RegexFilter('subject-', right_bound='/', values=[str(idx + 1).zfill(3) for idx in range(100)], description='')
         matching_directories = regex_filter.get_matching_files([path.as_posix() + '/' for path in Path('data').glob('*')])
-        participants = [Path(participant).stem for participant in matching_directories]
-        participants.sort()
+        participant_ids = [Path(participant).stem for participant in matching_directories]
+        participant_ids.sort()
     else:
-        participants = str(args.participants).replace(' ', '').split(',')
+        participant_ids = str(args.participants).replace(' ', '').split(',')
 
+
+    participants = []
+    for participant_id in participant_ids:
+        participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
+        assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
+        participants.append(Participant.load(participant_files[0]))
+
+    calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     validation_plotter = Plotter(participants, stage='validation')
     validation_plotter.plot_fitts_metrics()
