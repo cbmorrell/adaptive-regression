@@ -54,35 +54,27 @@ class Plotter:
         return Log(fitts_file)
 
     def plot_throughput_over_time(self):
-        metrics = ['Throughput', 'Path Efficiency', 'Overshoots']
-        metrics = {
+        data = {
             'Throughput (bits/s)': [],
-        }
-        trial_info = {
             'Trials': [],
-            'Model': [],
+            'Model': []
         }
-        fig, ax = plt.subplots(nrows=1, ncols=len(metrics), sharex=True, layout='constrained', figsize=(6, 4))
+        fig, ax = plt.subplots(nrows=1, ncols=1, layout='constrained', figsize=(6, 4))
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 fitts_metrics = log.extract_fitts_metrics()
-                metrics['Throughput (bits/s)'].extend(moving_average(fitts_metrics['throughput']))
-                num_trials = len(moving_average(fitts_metrics['throughput']))
-                # TODO: See how Evan did his throughput over time plot... when I use the timestamps none line up (since each trial time is different) and then it's super noisy and no confidence intervals
-                trial_info['Trials'].extend([idx + 1 for idx in range(num_trials)])
-                trial_info['Model'].extend([format_names(model) for _ in range(num_trials)])
+                throughput = moving_average(fitts_metrics['throughput'], window_size=10)
+                data['Throughput (bits/s)'].extend(throughput)
+                num_trials = len(throughput)
+                data['Trials'].extend([idx + 1 for idx in range(num_trials)])
+                data['Model'].extend([format_names(model) for _ in range(num_trials)])
                 
 
-        data = {}
-        data.update(metrics)
-        data.update(trial_info)
         df = pd.DataFrame(data)
         sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=ax)
-
         ax.set_title(f"Throughput Over {self.stage} Period".title())
-        plt.show()
-        self._save_fig(fig, 'fitts-metrics-over-time.png')
+        self._save_fig(fig, 'throughput-over-time.png')
         return fig
 
     def plot_fitts_metrics(self):
