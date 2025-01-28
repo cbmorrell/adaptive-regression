@@ -59,7 +59,7 @@ class Plotter:
             'Trials': [],
             'Model': []
         }
-        fig, ax = plt.subplots(nrows=1, ncols=1, layout='constrained', figsize=(6, 4))
+        fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
@@ -250,7 +250,7 @@ class Plotter:
         return fig
 
     def plot_loss(self):
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
         epochs = []
         losses = []
         model_labels = []
@@ -340,7 +340,7 @@ class Plotter:
         return fig
 
     def plot_decision_stream(self):
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
         log = self.read_log(self.participants[12], 'ciil')
 
         decision_stream_predictions = []
