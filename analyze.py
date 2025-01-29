@@ -117,23 +117,81 @@ class Plotter:
         data.update(metrics)
         data.update(trial_info)
         df = pd.DataFrame(data)
-        df.to_csv(self.results_path.joinpath('stats.csv'))
+        df.to_csv(self.results_path.joinpath('fitts-metrics.csv'))
 
         axs = np.ravel(axs)   # flatten array - don't need it in a grid
         x = 'Model'
         hue = 'Adaptive'
         palette = {'Yes': self.palette[0], 'No': self.palette[1]} # want "yes" to be green (assumes Dark2 color palette)
         meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
+        formatted_model_names = format_names(self.models)
+
+        try:
+            stats_df = pd.read_csv(self.results_path.joinpath('stats.csv'))
+            stats_df['p-value'] = pd.to_numeric(stats_df['p-value'], errors='coerce').fillna(0) # "p < 0.0001" converted to NaN, so we fill that with 0
+        except FileNotFoundError:
+            stats_df = None
+            print('Stats file not found - not annotating boxplot.')
+
         for metric, ax in zip(metrics.keys(), axs):
             legend = 'auto' if ax == axs[3] else False # only plot legend on last axis
             if len(self.participants) == 1:
                 sns.barplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette)
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
+            
+            # if metric == metric_keys[0]:
+            #     significant_differences = ( # model 1, model 2, p-value
+            #         (0, 2, 0),
+            #         (0, 3, 0),
+            #         (1, 2, 0),
+            #         (1, 3, 0)
+            #     )
+            # elif metric == metric_keys[1]:
+            #     significant_differences = (
+            #         (0, 2, 0.06554),
+            #         (0, 3, 0.01381),
+            #         (1, 2, 0.00210),
+            #         ()
+            #     )
+
+            if stats_df is not None:
+                # for x1, x2, p in significant_differences:
+                bottom, top = ax.get_ylim()
+                y_axis_range = top - bottom
+                level = 0
+                for _, row in stats_df.iterrows():
+                    stats_metric, comparison, p = row
+                    if stats_metric not in metric:
+                        # Metric names in stats don't always line up with dictionary keys
+                        continue
+
+                    if p < 0.001:
+                        symbol = '***'
+                    elif p < 0.01:
+                        symbol = '**'
+                    elif p < 0.05:
+                        symbol = '*'
+                    else:
+                        # Only want to plot bars for significant differences
+                        continue
+
+                    comparison = comparison.replace('(', '').replace(')', '')
+                    compared_models = [formatted_model_names.index(compared_model) for compared_model in comparison.split(' - ')]
+                    x1, x2 = compared_models
+                    bar_height = (y_axis_range * 0.07 * level) + top
+                    bar_tips = bar_height - (y_axis_range * 0.02)
+                    ax.plot([x1, x1, x2, x2], [bar_tips, bar_height, bar_height, bar_tips], linewidth=1, c='k')
+                    ax.text((x1 + x2) * 0.5, bar_height - (y_axis_range * 0.02), symbol, ha='center', va='bottom', c='k')
+                    level += 1
+
 
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
-            mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier')
+            mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier'),
+            # mpatches.Patch(color='none', label='$*$ $p < 0.05$'),
+            # mpatches.Patch(color='none', label='$**$ $p < 0.01$'),
+            # mpatches.Patch(color='none', label='$***$ $p < 0.001$')
         ]
         fig.legend(handles=symbol_handles, title='Symbols', loc='outside upper left', ncols=len(symbol_handles))
         color_legend = axs[3].get_legend()
