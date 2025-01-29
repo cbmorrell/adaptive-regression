@@ -77,7 +77,6 @@ class Plotter:
         return fig
 
     def plot_fitts_metrics(self):
-        # TODO: Add significance test results to boxplot https://rowannicholls.github.io/python/graphs/ax_based/boxplots_significance.html
         metrics = {
             'Throughput (bits/s)': [],
             'Path Efficiency (%)': [],
@@ -140,23 +139,7 @@ class Plotter:
             else:
                 sns.boxplot(df, x=x, y=metric, ax=ax, hue=hue, legend=legend, palette=palette, showmeans=True, meanprops=meanprops) # maybe color boxes based on intended and unintended RMSE? or experience level? or have three box plots: within, combined, and all?
             
-            # if metric == metric_keys[0]:
-            #     significant_differences = ( # model 1, model 2, p-value
-            #         (0, 2, 0),
-            #         (0, 3, 0),
-            #         (1, 2, 0),
-            #         (1, 3, 0)
-            #     )
-            # elif metric == metric_keys[1]:
-            #     significant_differences = (
-            #         (0, 2, 0.06554),
-            #         (0, 3, 0.01381),
-            #         (1, 2, 0.00210),
-            #         ()
-            #     )
-
             if stats_df is not None:
-                # for x1, x2, p in significant_differences:
                 bottom, top = ax.get_ylim()
                 y_axis_range = top - bottom
                 level = 0
@@ -189,9 +172,6 @@ class Plotter:
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
             mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier'),
-            # mpatches.Patch(color='none', label='$*$ $p < 0.05$'),
-            # mpatches.Patch(color='none', label='$**$ $p < 0.01$'),
-            # mpatches.Patch(color='none', label='$***$ $p < 0.001$')
         ]
         fig.legend(handles=symbol_handles, title='Symbols', loc='outside upper left', ncols=len(symbol_handles))
         color_legend = axs[3].get_legend()
