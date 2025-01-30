@@ -168,6 +168,10 @@ class Plotter:
                     ax.text((x1 + x2) * 0.5, bar_height - (y_axis_range * 0.02), symbol, ha='center', va='bottom', c='k')
                     level += 1
 
+            if '%' in metric:
+                percent_ticks = [tick for tick in ax.get_yticks() if tick <= 100 and tick >= 0]
+                ax.set_yticks(percent_ticks)
+
 
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
