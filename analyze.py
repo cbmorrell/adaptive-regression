@@ -24,20 +24,23 @@ RESULTS_DIRECTORY = 'results'
 
 
 class Plotter:
-    def __init__(self, participants, dpi = 400, stage = 'validation'):
+    def __init__(self, participants, dpi = 400, stage = None):
         self.participants = participants
         self.dpi = dpi
         self.stage = stage
-        self.plot_adaptation = self.stage == 'adaptation'
-        self.models = MODELS
-        if self.plot_adaptation:
+        if self.stage == 'adaptation':
             self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
+        else:
+            self.models = MODELS
 
         self.stage_agnostic_results_path = Path(RESULTS_DIRECTORY)
         if len(participants) == 1:
             self.stage_agnostic_results_path = self.stage_agnostic_results_path.joinpath(self.participants[0].id)
 
-        self.results_path = self.stage_agnostic_results_path.joinpath(self.stage)
+        if self.stage is None:
+            self.results_path = self.stage_agnostic_results_path
+        else:
+            self.results_path = self.stage_agnostic_results_path.joinpath(self.stage)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
         self.palette = sns.color_palette()
@@ -45,10 +48,12 @@ class Plotter:
 
     def read_log(self, participant, model):
         config = make_config(participant, model)
-        if self.plot_adaptation:
+        if self.stage == 'adaptation':
             fitts_file = config.adaptation_fitts_file
-        else:
+        elif self.stage == 'validation':
             fitts_file = config.validation_fitts_file
+        else:
+            raise ValueError(f"Can't read Fitts log with unknown stage. Got: {self.stage}.")
 
         return Log(fitts_file)
 
@@ -727,6 +732,7 @@ def main():
 
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
+    # TODO: Add 'paper' vs. 'presentation' parameters to Plotter to adjust figure layouts
     validation_plotter = Plotter(participants, stage='validation')
     validation_plotter.plot_fitts_metrics()
     validation_plotter.plot_throughput_over_time()
