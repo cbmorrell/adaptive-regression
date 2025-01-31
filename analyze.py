@@ -24,10 +24,12 @@ RESULTS_DIRECTORY = 'results'
 
 
 class Plotter:
-    def __init__(self, participants, dpi = 400, stage = None):
+    def __init__(self, participants, dpi = 400, stage = None, presentation_layout = False):
         self.participants = participants
         self.dpi = dpi
         self.stage = stage
+        self.presentation_layout = presentation_layout
+
         if self.stage == 'adaptation':
             self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
         else:
