@@ -463,6 +463,9 @@ class Plotter:
 
         axs[0, 0].set_xticks(np.arange(0, axs[0, 0].get_xlim()[1]))
         axs[0, 0].minorticks_off()
+        xlabel = 'Responses'
+        axs[-1, 0].set_xlabel(xlabel)
+        axs[-1, 1].set_xlabel(xlabel)
         fig.suptitle('Survey Results')
         handles = [mpatches.Patch(color=color, label=label) for label, color in responses.items()]
         fig.legend(handles=handles, ncols=len(responses), loc='outside lower center')
