@@ -66,29 +66,40 @@ class Plotter:
         return Log(fitts_file)
 
     def plot_throughput_over_time(self):
-        if self.stage is None:
+        if self.stage == Stage.ADAPTATION:
+            stage_time = ADAPTATION_TIME
+        elif self.stage == Stage.VALIDATION:
+            stage_time = VALIDATION_TIME
+        else:
             self._raise_stage_error('plot throughput over time')
 
         data = {
             'Throughput (bits/s)': [],
             'Trials': [],
-            'Model': []
+            'Model': [],
+            'Time (seconds)': []
         }
         fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
-        t = np.arange(0, VALIDATION_TIME)
+        
+        t = np.arange(0, stage_time)
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
                 fitts_metrics = log.extract_fitts_metrics()
-                throughput = moving_average(fitts_metrics['throughput'], window_size=10)
+                throughput = np.array([0] + fitts_metrics['throughput'])    # start with a tp of 0
+                timestamps = np.array([0] + fitts_metrics['time'])  # start with a timestamp of 0
+                align_mask = np.searchsorted(timestamps, t, side='right') - 1    # hold throughput until a new trial is completed
+                throughput = throughput[align_mask]
+                throughput = moving_average(throughput, window_size=30)
                 data['Throughput (bits/s)'].extend(throughput)
+                data['Time (seconds)'].extend(np.linspace(0, t[-1], num=throughput.shape[0]))
                 num_trials = len(throughput)
                 data['Trials'].extend([idx + 1 for idx in range(num_trials)])
                 data['Model'].extend([format_names(model) for _ in range(num_trials)])
                 
 
         df = pd.DataFrame(data)
-        sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=ax, palette=self.model_palette)
+        sns.lineplot(df, x='Time (seconds)', y='Throughput (bits/s)', hue='Model', ax=ax, palette=self.model_palette)
         ax.set_title(f"Throughput Over {self.stage.value} Period".title())
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
@@ -122,7 +133,7 @@ class Plotter:
                 trial_info['Subject ID'].append(participant.id)
                 trial_info['Model'].append(format_names(model))
                 trial_info['Adaptive'].append('Yes' if config.model_is_adaptive else 'No')
-                fitts_metrics = log.extract_fitts_metrics(exclude_warmup_trials=True)
+                fitts_metrics = log.extract_fitts_metrics(exclude_learning_trials=True)
                 metrics['Throughput (bits/s)'].append(np.mean(fitts_metrics['throughput']))
                 metrics['Path Efficiency (%)'].append(np.mean(fitts_metrics['efficiency']) * 100) # express as %
                 metrics['Overshoots per Trial'].append(np.mean(fitts_metrics['overshoots']))
@@ -546,9 +557,9 @@ class Log:
             
         self.trials = trials
 
-    def extract_fitts_metrics(self, exclude_warmup_trials = False):
+    def extract_fitts_metrics(self, exclude_learning_trials = False):
         trials = self.trials
-        if exclude_warmup_trials:
+        if exclude_learning_trials:
             num_warmup_trials = 20  # based on average plot of throughput over time
             trials = trials[num_warmup_trials:]
 
