@@ -3,6 +3,7 @@ import math
 import pickle
 from argparse import ArgumentParser
 import textwrap
+from enum import Enum
 
 import torch
 import pandas as pd
@@ -15,12 +16,17 @@ import matplotlib.patches as mpatches
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
-from utils.adaptation import TIMEOUT, DWELL_TIME, Memory
+from utils.adaptation import TIMEOUT, DWELL_TIME, Memory, ADAPTATION_TIME, VALIDATION_TIME
 from utils.models import MLP
 from experiment import MODELS, Participant, make_config, Config
 
 
 RESULTS_DIRECTORY = 'results'
+
+
+class Stage(Enum):
+    ADAPTATION = 'adaptation'
+    VALIDATION = 'validation'
 
 
 class Plotter:
@@ -30,7 +36,7 @@ class Plotter:
         self.stage = stage
         self.presentation_layout = presentation_layout
 
-        if self.stage == 'adaptation':
+        if self.stage == Stage.ADAPTATION:
             self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
         else:
             self.models = MODELS
@@ -42,7 +48,7 @@ class Plotter:
         if self.stage is None:
             self.results_path = self.stage_agnostic_results_path
         else:
-            self.results_path = self.stage_agnostic_results_path.joinpath(self.stage)
+            self.results_path = self.stage_agnostic_results_path.joinpath(self.stage.value)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
         self.palette = sns.color_palette()
@@ -50,22 +56,26 @@ class Plotter:
 
     def read_log(self, participant, model):
         config = make_config(participant, model)
-        if self.stage == 'adaptation':
+        if self.stage == Stage.ADAPTATION:
             fitts_file = config.adaptation_fitts_file
-        elif self.stage == 'validation':
+        elif self.stage == Stage.VALIDATION:
             fitts_file = config.validation_fitts_file
         else:
-            raise ValueError(f"Can't read Fitts log with unknown stage. Got: {self.stage}.")
+            self._raise_stage_error('read Fitts log')
 
         return Log(fitts_file)
 
     def plot_throughput_over_time(self):
+        if self.stage is None:
+            self._raise_stage_error('plot throughput over time')
+
         data = {
             'Throughput (bits/s)': [],
             'Trials': [],
             'Model': []
         }
         fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
+        t = np.arange(0, VALIDATION_TIME)
         for model in self.models:
             for participant in self.participants:
                 log = self.read_log(participant, model)
@@ -79,11 +89,14 @@ class Plotter:
 
         df = pd.DataFrame(data)
         sns.lineplot(df, x='Trials', y='Throughput (bits/s)', hue='Model', ax=ax, palette=self.model_palette)
-        ax.set_title(f"Throughput Over {self.stage} Period".title())
+        ax.set_title(f"Throughput Over {self.stage.value} Period".title())
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
 
     def plot_fitts_metrics(self):
+        if self.stage is None:
+            self._raise_stage_error('plot Fitts metrics')
+
         metrics = {
             'Throughput (bits/s)': [],
             'Path Efficiency (%)': [],
@@ -194,6 +207,9 @@ class Plotter:
         return fig
 
     def plot_fitts_traces(self):
+        if self.stage is None:
+            self._raise_stage_error('plot Fitts traces')
+
         fig, axs = plt.subplots(nrows=1, ncols=len(self.models), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
         cmap = mpl.colormaps['Dark2']
         lines = []
@@ -217,6 +233,9 @@ class Plotter:
         return fig
 
     def plot_dof_activation_heatmap(self):
+        if self.stage is None:
+            self._raise_stage_error('plot heatmap')
+
         # Create heatmap where x is DOF 1 and y is DOF2
         fig = plt.figure(figsize=(10, 10), constrained_layout=True)
         outer_grid = fig.add_gridspec(nrows=2, ncols=2)
@@ -386,6 +405,9 @@ class Plotter:
         return fig
 
     def plot_decision_stream(self):
+        if self.stage is None:
+            self._raise_stage_error('plot decision stream')
+
         fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
         log = self.read_log(self.participants[12], 'ciil')
 
@@ -396,7 +418,7 @@ class Plotter:
             decision_stream_timestamps.extend(trial.prediction_timestamps)
         decision_stream_predictions = np.array(decision_stream_predictions)
 
-        if self.stage == 'adaptation':
+        if self.stage == Stage.ADAPTATION:
             memory = Memory()
             memory.from_file(Path(log.path).parent.as_posix(), 1000)
             pseudolabels = []
@@ -418,7 +440,7 @@ class Plotter:
 
         ax.set_xlabel('Timestamps')
         ax.set_ylabel('Pronation / Supination Activation')
-        ax.set_title(f"Decision Stream ({self.stage})".title())
+        ax.set_title(f"Decision Stream ({self.stage.value})".title())
         self._save_fig(fig, 'decision-stream.png')
 
     def plot_survey_results(self):
@@ -482,6 +504,9 @@ class Plotter:
         filepath = results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
         print(f"File saved to {filepath.as_posix()}.")
+
+    def _raise_stage_error(self, task):
+        raise ValueError(f"Stage must be specified when trying to perform task: {task}. Current stage value: {self.stage}.")
 
 
 class Log:
@@ -738,14 +763,14 @@ def main():
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     # TODO: Add 'paper' vs. 'presentation' parameters to Plotter to adjust figure layouts
-    validation_plotter = Plotter(participants, stage='validation')
+    validation_plotter = Plotter(participants, stage=Stage.VALIDATION)
     validation_plotter.plot_fitts_metrics()
     validation_plotter.plot_throughput_over_time()
     validation_plotter.plot_dof_activation_heatmap()
     validation_plotter.plot_loss()
     validation_plotter.plot_survey_results()
 
-    adaptation_plotter = Plotter(participants, stage='adaptation')
+    adaptation_plotter = Plotter(participants, stage=Stage.ADAPTATION)
     adaptation_plotter.plot_throughput_over_time()
     
     plt.show()
