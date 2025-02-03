@@ -258,7 +258,7 @@ class Plotter:
         self._save_fig(fig, f"{stage}-fitts-traces.png")
         return fig
 
-    def plot_dof_activation_heatmap(self, stage):
+    def plot_dof_activation_heatmap(self, stage, show_histograms = False):
         if stage == ADAPTATION:
             models = self.adaptation_models
         elif stage == VALIDATION:
@@ -266,9 +266,14 @@ class Plotter:
         else:
             self._raise_stage_error(stage)
 
-        # Create heatmap where x is DOF 1 and y is DOF2
-        fig = plt.figure(figsize=(10, 10), constrained_layout=True)
-        outer_grid = fig.add_gridspec(nrows=2, ncols=2)
+        if show_histograms:
+            fig = plt.figure(figsize=(10, 10), constrained_layout=True)
+            axs = None
+            outer_grid = fig.add_gridspec(nrows=2, ncols=2)
+        else:
+            fig, axs = plt.subplots(nrows=1, ncols=4, layout='constrained', figsize=(16, 4))
+            outer_grid = None
+
         width_ratios = [2, 1]
         height_ratios = [1, 2]
         bins = np.round(np.arange(-1.1, 1.2, 0.2), 2)  # extend past 1 to include 1 in arange
@@ -277,65 +282,93 @@ class Plotter:
         bbox = {'boxstyle': 'round'}
         x_hist_axs = []
         y_hist_axs = []
-        for model_idx, model in enumerate(models):
+        predictions = {}
+        vmin = None
+        vmax = None
+        for model in models:
             model_predictions = []
             for participant in self.participants:
                 log = self.read_log(participant, model, stage)
-                predictions = [trial.predictions for trial in log.trials]
-                predictions = np.concatenate(predictions)
-                model_predictions.append(predictions)
+                log_predictions = [trial.predictions for trial in log.trials]
+                log_predictions = np.concatenate(log_predictions)
+                model_predictions.append(log_predictions)
             model_predictions = np.concatenate(model_predictions)
+            x_y_counts, _, _ = np.histogram2d(model_predictions[:, 0], model_predictions[:, 1], bins=bins, density=False)   # density sets it to return pdf, not % occurrences
+            vmin = x_y_counts.min() if vmin is None else min(vmin, x_y_counts.min())
+            vmax = x_y_counts.max() if vmax is None else max(vmax, x_y_counts.max())
+            predictions[model] = model_predictions
 
-            # Format heatmap + histogram axes
-            inner_grid = outer_grid[model_idx].subgridspec(nrows=2, ncols=2, width_ratios=width_ratios, height_ratios=height_ratios)
-            axs = inner_grid.subplots()
-            heatmap_ax = axs[1, 0]
-            x_hist_ax = axs[0, 0]
-            y_hist_ax = axs[1, 1]
-            axs[0, 1].set_axis_off()    # hide unused axis
-            x_hist_axs.append(x_hist_ax)
-            y_hist_axs.append(y_hist_ax)
+        assert vmin is not None and vmax is not None, 'Error calculating min and max values for colorbar normalization.'
+        vmin = max(vmin, 1) # can't have a log value of 0
 
-            # Plot
-            # nm_mask = np.all(np.abs(model_predictions) < bins[bins.shape[0] // 2], axis=1)
-            # model_predictions = model_predictions[~nm_mask]
+        for model_idx, model in enumerate(models):
+            model_predictions = predictions[model]
             simultaneous_mask = np.all(np.abs(model_predictions) > 1e-3, axis=1)    # predictions are never exactly 0
             simultaneity = np.sum(simultaneous_mask) / model_predictions.shape[0]
             x_predictions = model_predictions[:, 0]
             y_predictions = model_predictions[:, 1]
             x_y_counts, _, _ = np.histogram2d(x_predictions, y_predictions, bins=bins, density=False)   # density sets it to return pdf, not % occurrences
-            x_hist_ax.hist(x_predictions, bins=bins)
-            y_hist_ax.hist(y_predictions, bins=bins, orientation='horizontal')
+
+            if outer_grid is not None:
+                # Format heatmap + histogram axes
+                inner_grid = outer_grid[model_idx].subgridspec(nrows=2, ncols=2, width_ratios=width_ratios, height_ratios=height_ratios)
+                axs = inner_grid.subplots()
+                heatmap_ax = axs[1, 0]
+                x_hist_ax = axs[0, 0]
+                y_hist_ax = axs[1, 1]
+                axs[0, 1].set_axis_off()    # hide unused axis
+                x_hist_axs.append(x_hist_ax)
+                y_hist_axs.append(y_hist_ax)
+
+                # Plot
+                # nm_mask = np.all(np.abs(model_predictions) < bins[bins.shape[0] // 2], axis=1)
+                # model_predictions = model_predictions[~nm_mask]
+                x_hist_ax.hist(x_predictions, bins=bins)
+                y_hist_ax.hist(y_predictions, bins=bins, orientation='horizontal')
+                x_hist_ax.set_xticks([])    # in line with heatmap, so ticks aren't needed
+                x_hist_ax.set_xlim(bins[0], bins[-1])
+                y_hist_ax.set_yticks([])    # in line with heatmap, so ticks aren't needed
+                y_hist_ax.set_ylim(bins[0], bins[-1])
+                x_hist_ax.set_title(format_names(model))
+                x_hist_ax.set_ylabel('Frequency')
+                y_hist_ax.set_xlabel('Frequency')
+                x_hist_ax.set_yscale('log')
+                x_hist_ax.set_yticks(hist_ticks)
+                x_hist_ax.minorticks_off()
+                y_hist_ax.set_xscale('log')
+                y_hist_ax.set_xticks(hist_ticks)
+                y_hist_ax.minorticks_off()
+                cbar = True
+                text_x = y_hist_ax.get_position().x0
+                text_y = x_hist_ax.get_position().y0
+                fig.text(text_x, text_y, f"Simultaneity: {100 * simultaneity:.1f}%",
+                        ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
+            else:
+                assert axs is not None, 'axs not defined.'
+                heatmap_ax = axs[model_idx]
+                cbar = model == models[-1]
+                heatmap_ax.set_title(format_names(model))
+                heatmap_ax.text(0, 1.05, f"Simultaneity: {100 * simultaneity:.1f}%",
+                        ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox,
+                        transform=heatmap_ax.transAxes)
+
+
             # Flip heatmap y bins so they align with 1D histograms and show bins in ascending order
-            heatmap = sns.heatmap(np.flip(x_y_counts, axis=0), ax=heatmap_ax, cmap=sns.light_palette('seagreen', as_cmap=True), norm=mpl.colors.LogNorm())
+            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
+            heatmap = sns.heatmap(np.flip(x_y_counts, axis=0), ax=heatmap_ax,
+                                  cmap=sns.light_palette('seagreen', as_cmap=True), norm=norm, cbar=cbar)
 
             # Formatting
-            colorbar = heatmap.collections[0].colorbar
-            colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
-            colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
             heatmap_ax.set_xticks(bin_ticks, bins, rotation=90)
             heatmap_ax.set_yticks(bin_ticks, np.flip(bins), rotation=0)
             heatmap_ax.set_xlabel('Open / Close Activation')
             heatmap_ax.set_ylabel('Pro / Supination Activation')
-            x_hist_ax.set_xticks([])    # in line with heatmap, so ticks aren't needed
-            x_hist_ax.set_xlim(bins[0], bins[-1])
-            y_hist_ax.set_yticks([])    # in line with heatmap, so ticks aren't needed
-            y_hist_ax.set_ylim(bins[0], bins[-1])
-            x_hist_ax.set_title(format_names(model))
-            x_hist_ax.set_ylabel('Frequency')
-            y_hist_ax.set_xlabel('Frequency')
-            x_hist_ax.set_yscale('log')
-            x_hist_ax.set_yticks(hist_ticks)
-            x_hist_ax.minorticks_off()
-            y_hist_ax.set_xscale('log')
-            y_hist_ax.set_xticks(hist_ticks)
-            y_hist_ax.minorticks_off()
-            text_x = y_hist_ax.get_position().x0
-            text_y = x_hist_ax.get_position().y0
-            fig.text(text_x, text_y, f"Simultaneity: {100 * simultaneity:.1f}%",
-                     ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
+            if cbar:
+                colorbar = heatmap.collections[0].colorbar
+                colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
+                colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
             
-        # Need to go through and align all histogram axes with eachother for consistent dimensions across subgrids
+        # Need to go through and align all histogram axes with eachother for consistent dimensions across subgrids (if applicable)
         for x_hist_ax, y_hist_ax in zip(x_hist_axs, y_hist_axs):
             x_hist_ax.sharey(x_hist_axs[0])
             y_hist_ax.sharex(y_hist_axs[0])
@@ -790,7 +823,7 @@ def main():
     plotter = Plotter(participants)
     # plotter.plot_fitts_metrics(VALIDATION)
     # plotter.plot_throughput_over_time()
-    # plotter.plot_dof_activation_heatmap(VALIDATION)
+    plotter.plot_dof_activation_heatmap(VALIDATION)
     # plotter.plot_loss()
     plotter.plot_survey_results()
     
