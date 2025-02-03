@@ -68,14 +68,15 @@ class Plotter:
     def plot_throughput_over_time(self):
         if self.stage == Stage.ADAPTATION:
             stage_time = ADAPTATION_TIME
+            legend_loc = 'upper left'
         elif self.stage == Stage.VALIDATION:
             stage_time = VALIDATION_TIME
+            legend_loc = 'upper right'
         else:
             self._raise_stage_error('plot throughput over time')
 
         data = {
             'Throughput (bits/s)': [],
-            'Trials': [],
             'Model': [],
             'Time (seconds)': []
         }
@@ -93,14 +94,12 @@ class Plotter:
                 throughput = moving_average(throughput, window_size=30)
                 data['Throughput (bits/s)'].extend(throughput)
                 data['Time (seconds)'].extend(np.linspace(0, t[-1], num=throughput.shape[0]))
-                num_trials = len(throughput)
-                data['Trials'].extend([idx + 1 for idx in range(num_trials)])
-                data['Model'].extend([format_names(model) for _ in range(num_trials)])
+                data['Model'].extend([format_names(model) for _ in range(throughput.shape[0])])
                 
-
         df = pd.DataFrame(data)
         sns.lineplot(df, x='Time (seconds)', y='Throughput (bits/s)', hue='Model', ax=ax, palette=self.model_palette)
         ax.set_title(f"Throughput Over {self.stage.value} Period".title())
+        sns.move_legend(ax, loc=legend_loc, ncols=len(self.models))
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
 
