@@ -22,70 +22,77 @@ from experiment import MODELS, Participant, make_config, Config
 
 
 RESULTS_DIRECTORY = 'results'
-
-
-class Stage(Enum):
-    ADAPTATION = 'adaptation'
-    VALIDATION = 'validation'
+ADAPTATION = 'adaptation'
+VALIDATION = 'validation'
 
 
 class Plotter:
-    def __init__(self, participants, dpi = 400, stage = None, presentation_layout = False):
+    def __init__(self, participants, dpi = 400, presentation_layout = False):
         self.participants = participants
         self.dpi = dpi
-        self.stage = stage
         self.presentation_layout = presentation_layout
+        self.validation_models = MODELS
+        self.adaptation_models = (MODELS[2], MODELS[3])
 
-        if self.stage == Stage.ADAPTATION:
-            self.models = (MODELS[2], MODELS[3])  # reorder based on best visual for plots (oracle, ciil)
-        else:
-            self.models = MODELS
-
-        self.stage_agnostic_results_path = Path(RESULTS_DIRECTORY)
+        self.results_path = Path(RESULTS_DIRECTORY)
         if len(participants) == 1:
-            self.stage_agnostic_results_path = self.stage_agnostic_results_path.joinpath(self.participants[0].id)
+            self.results_path = self.results_path.joinpath(self.participants[0].id)
 
-        if self.stage is None:
-            self.results_path = self.stage_agnostic_results_path
-        else:
-            self.results_path = self.stage_agnostic_results_path.joinpath(self.stage.value)
         self.results_path.mkdir(parents=True, exist_ok=True)
 
         self.palette = sns.color_palette()
         self.model_palette = {format_names(model): color for model, color in zip(MODELS, self.palette)} # loop over all models to keep consistent colors for all plots
 
-    def read_log(self, participant, model):
+    def read_log(self, participant, model, stage):
         config = make_config(participant, model)
-        if self.stage == Stage.ADAPTATION:
+        if stage == ADAPTATION:
             fitts_file = config.adaptation_fitts_file
-        elif self.stage == Stage.VALIDATION:
+        elif stage == VALIDATION:
             fitts_file = config.validation_fitts_file
         else:
-            self._raise_stage_error('read Fitts log')
+            self._raise_stage_error(stage)
 
         return Log(fitts_file)
 
     def plot_throughput_over_time(self):
-        if self.stage == Stage.ADAPTATION:
+        fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(12, 4))
+        self.plot_throughput_over_stage(ADAPTATION, ax=axs[0])
+        self.plot_throughput_over_stage(VALIDATION, ax=axs[1])
+
+        axs[0].get_legend().remove()    # don't want duplicate legend
+        sns.move_legend(axs[1], loc='center left', bbox_to_anchor=(1, 0.5))
+
+
+        self._save_fig(fig, 'throughput-over-time.png')
+        return fig
+
+
+    def plot_throughput_over_stage(self, stage, ax = None):
+        if stage == ADAPTATION:
             stage_time = ADAPTATION_TIME
             legend_loc = 'upper left'
-        elif self.stage == Stage.VALIDATION:
+            models = self.adaptation_models
+        elif stage == VALIDATION:
             stage_time = VALIDATION_TIME
             legend_loc = 'upper right'
+            models = self.validation_models
         else:
-            self._raise_stage_error('plot throughput over time')
+            self._raise_stage_error(stage)
+
+        if ax is None:
+            fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
+        else:
+            fig = None
 
         data = {
             'Throughput (bits/s)': [],
             'Model': [],
             'Time (seconds)': []
         }
-        fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
-        
         t = np.arange(0, stage_time)
-        for model in self.models:
+        for model in models:
             for participant in self.participants:
-                log = self.read_log(participant, model)
+                log = self.read_log(participant, model, stage)
                 fitts_metrics = log.extract_fitts_metrics()
                 throughput = np.array([0] + fitts_metrics['throughput'])    # start with a tp of 0
                 timestamps = np.array([0] + fitts_metrics['time'])  # start with a timestamp of 0
@@ -98,14 +105,19 @@ class Plotter:
                 
         df = pd.DataFrame(data)
         sns.lineplot(df, x='Time (seconds)', y='Throughput (bits/s)', hue='Model', ax=ax, palette=self.model_palette)
-        ax.set_title(f"Throughput Over {self.stage.value} Period".title())
-        sns.move_legend(ax, loc=legend_loc, ncols=len(self.models))
-        self._save_fig(fig, 'throughput-over-time.png')
+        ax.set_title(f"Throughput Over {stage} Period".title())
+        sns.move_legend(ax, loc=legend_loc, ncols=len(models))
+        if fig is not None:
+            self._save_fig(fig, f"throughput-over-{stage}.png")
         return fig
 
-    def plot_fitts_metrics(self):
-        if self.stage is None:
-            self._raise_stage_error('plot Fitts metrics')
+    def plot_fitts_metrics(self, stage):
+        if stage == ADAPTATION:
+            models = self.adaptation_models
+        elif stage == VALIDATION:
+            models = self.validation_models
+        else:
+            self._raise_stage_error(stage)
 
         metrics = {
             'Throughput (bits/s)': [],
@@ -124,9 +136,9 @@ class Plotter:
         }
 
         fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=(12, 8), sharex=True)
-        for model in self.models:
+        for model in models:
             for participant in self.participants:
-                log = self.read_log(participant, model)
+                log = self.read_log(participant, model, stage)
                 config = make_config(participant, model)
 
                 trial_info['Subject ID'].append(participant.id)
@@ -146,14 +158,14 @@ class Plotter:
         data.update(metrics)
         data.update(trial_info)
         df = pd.DataFrame(data)
-        df.to_csv(self.results_path.joinpath('fitts-metrics.csv'))
+        df.to_csv(self.results_path.joinpath(f"{stage}-fitts-metrics.csv"))
 
         axs = np.ravel(axs)   # flatten array - don't need it in a grid
         x = 'Model'
         hue = 'Adaptive'
         palette = {'Yes': self.palette[0], 'No': self.palette[1]} # want "yes" to be green (assumes Dark2 color palette)
         meanprops = {'markerfacecolor': 'black', 'markeredgecolor': 'black', 'marker': 'D'}
-        formatted_model_names = format_names(self.models)
+        formatted_model_names = format_names(models)
 
         try:
             stats_df = pd.read_csv(self.results_path.joinpath('stats.csv'))
@@ -213,19 +225,23 @@ class Plotter:
         color_legend.remove()
 
         fig.suptitle('Online Usability Metrics')
-        self._save_fig(fig, 'fitts-metrics.png')
+        self._save_fig(fig, f"{stage}-fitts-metrics.png")
         return fig
 
-    def plot_fitts_traces(self):
-        if self.stage is None:
-            self._raise_stage_error('plot Fitts traces')
+    def plot_fitts_traces(self, stage):
+        if stage == ADAPTATION:
+            models = self.adaptation_models
+        elif stage == VALIDATION:
+            models = self.validation_models
+        else:
+            self._raise_stage_error(stage)
 
-        fig, axs = plt.subplots(nrows=1, ncols=len(self.models), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
+        fig, axs = plt.subplots(nrows=1, ncols=len(models), figsize=(14, 8), layout='constrained', sharex=True, sharey=True)
         cmap = mpl.colormaps['Dark2']
         lines = []
-        for model, ax in zip(self.models, axs):
+        for model, ax in zip(models, axs):
             for participant_idx, participant in enumerate(self.participants):
-                log = self.read_log(participant, model)
+                log = self.read_log(participant, model, stage)
                 traces = [trial.cursor_positions for trial in log.trials]
                 for trace in traces:
                     lines.extend(ax.plot(trace[:, 0], trace[:, 1], c=cmap(participant_idx), label=participant.id, linewidth=1, alpha=0.5))
@@ -239,12 +255,16 @@ class Plotter:
             axs[-1].legend(legend_handles.values(), format_names(legend_handles.keys()))
 
         fig.suptitle('Fitts Traces')
-        self._save_fig(fig, 'fitts-traces.png')
+        self._save_fig(fig, f"{stage}-fitts-traces.png")
         return fig
 
-    def plot_dof_activation_heatmap(self):
-        if self.stage is None:
-            self._raise_stage_error('plot heatmap')
+    def plot_dof_activation_heatmap(self, stage):
+        if stage == ADAPTATION:
+            models = self.adaptation_models
+        elif stage == VALIDATION:
+            models = self.validation_models
+        else:
+            self._raise_stage_error(stage)
 
         # Create heatmap where x is DOF 1 and y is DOF2
         fig = plt.figure(figsize=(10, 10), constrained_layout=True)
@@ -257,10 +277,10 @@ class Plotter:
         bbox = {'boxstyle': 'round'}
         x_hist_axs = []
         y_hist_axs = []
-        for model_idx, model in enumerate(self.models):
+        for model_idx, model in enumerate(models):
             model_predictions = []
             for participant in self.participants:
-                log = self.read_log(participant, model)
+                log = self.read_log(participant, model, stage)
                 predictions = [trial.predictions for trial in log.trials]
                 predictions = np.concatenate(predictions)
                 model_predictions.append(predictions)
@@ -321,7 +341,7 @@ class Plotter:
             y_hist_ax.sharex(y_hist_axs[0])
 
         fig.suptitle('Activation Heatmap')
-        self._save_fig(fig, 'heatmap.png')
+        self._save_fig(fig, f"{stage}-heatmap.png")
         return fig
 
     def plot_loss(self):
@@ -329,7 +349,7 @@ class Plotter:
         epochs = []
         losses = []
         model_labels = []
-        for model in self.models:
+        for model in MODELS:
             for participant in self.participants:
                 config = make_config(participant, model)
                 loss_df = pd.read_csv(config.loss_file, header=None)
@@ -356,7 +376,7 @@ class Plotter:
              bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor='white'),
              fontsize=10)
         ax.set_title('Training Loss')
-        self._save_fig(fig, 'loss.png', stage_agnostic=True)
+        self._save_fig(fig, 'loss.png')
         return fig
 
     def plot_num_reps_wsgt(self):
@@ -395,7 +415,7 @@ class Plotter:
         df = pd.DataFrame(metrics)
         sns.boxplot(df, x='# reps', y='MAE', ax=ax)
         fig.suptitle('Impact of # Reps During Training for W-SGT')
-        self._save_fig(fig, 'offline.png', stage_agnostic=True)
+        self._save_fig(fig, 'offline.png')
         return fig
 
     def plot_prompt_labels(self):
@@ -414,12 +434,9 @@ class Plotter:
         self._save_fig(fig, 'prompt.png')
         return fig
 
-    def plot_decision_stream(self):
-        if self.stage is None:
-            self._raise_stage_error('plot decision stream')
-
+    def plot_decision_stream(self, stage):
         fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
-        log = self.read_log(self.participants[12], 'ciil')
+        log = self.read_log(self.participants[12], 'ciil', stage)
 
         decision_stream_predictions = []
         decision_stream_timestamps = []
@@ -428,7 +445,7 @@ class Plotter:
             decision_stream_timestamps.extend(trial.prediction_timestamps)
         decision_stream_predictions = np.array(decision_stream_predictions)
 
-        if self.stage == Stage.ADAPTATION:
+        if stage == ADAPTATION:
             memory = Memory()
             memory.from_file(Path(log.path).parent.as_posix(), 1000)
             pseudolabels = []
@@ -444,20 +461,21 @@ class Plotter:
             ignored = np.array(ignored)
             ax.scatter(pseudolabels[:, 0], pseudolabels[:, 1], s=2, label='Pseudolabels')
             ax.scatter(ignored[:, 0], ignored[:, 1], s=2, label='Ignored')
-
-        else:
+        elif stage == VALIDATION:
             ax.plot(decision_stream_timestamps, decision_stream_predictions[:, 1])
+        else:
+            self._raise_stage_error(stage)
 
         ax.set_xlabel('Timestamps')
         ax.set_ylabel('Pronation / Supination Activation')
-        ax.set_title(f"Decision Stream ({self.stage.value})".title())
-        self._save_fig(fig, 'decision-stream.png')
+        ax.set_title(f"Decision Stream ({stage})".title())
+        self._save_fig(fig, f"{stage}-decision-stream.png")
 
     def plot_survey_results(self):
         if len(self.participants) == 1:
             print('Only 1 participant found - skipping plot of survey results.')
             return
-        df = pd.read_csv(self.stage_agnostic_results_path.joinpath('intra-survey-results.csv'))
+        df = pd.read_csv(self.results_path.joinpath('intra-survey-results.csv'))
         questions = [ 
             'I had good control of isolated motions (e.g., move right)',
             'I had good control of combined motions (e.g., move up and right)',
@@ -503,20 +521,16 @@ class Plotter:
         fig.suptitle('Survey Results')
         handles = [mpatches.Patch(color=color, label=label) for label, color in responses.items()]
         fig.legend(handles=handles, ncols=len(responses), loc='outside lower center')
-        self._save_fig(fig, 'survey.png', stage_agnostic=True)
+        self._save_fig(fig, 'survey.png')
         return fig
 
-    def _save_fig(self, fig, filename, stage_agnostic = False):
-        if stage_agnostic:
-            results_path = self.stage_agnostic_results_path
-        else:
-            results_path = self.results_path
-        filepath = results_path.joinpath(filename)
+    def _save_fig(self, fig, filename):
+        filepath = self.results_path.joinpath(filename)
         fig.savefig(filepath, dpi=self.dpi)
         print(f"File saved to {filepath.as_posix()}.")
 
-    def _raise_stage_error(self, task):
-        raise ValueError(f"Stage must be specified when trying to perform task: {task}. Current stage value: {self.stage}.")
+    def _raise_stage_error(self, stage):
+        raise ValueError(f"Unexpected value for stage. Current stage value: {stage}.")
 
 
 class Log:
@@ -772,16 +786,12 @@ def main():
 
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
-    # TODO: Add 'paper' vs. 'presentation' parameters to Plotter to adjust figure layouts
-    validation_plotter = Plotter(participants, stage=Stage.VALIDATION)
-    validation_plotter.plot_fitts_metrics()
-    validation_plotter.plot_throughput_over_time()
-    validation_plotter.plot_dof_activation_heatmap()
-    validation_plotter.plot_loss()
-    validation_plotter.plot_survey_results()
-
-    adaptation_plotter = Plotter(participants, stage=Stage.ADAPTATION)
-    adaptation_plotter.plot_throughput_over_time()
+    plotter = Plotter(participants)
+    plotter.plot_fitts_metrics(VALIDATION)
+    plotter.plot_throughput_over_time()
+    plotter.plot_dof_activation_heatmap(VALIDATION)
+    plotter.plot_loss()
+    plotter.plot_survey_results()
     
     plt.show()
     print('-------------Analysis complete!-------------')
