@@ -484,12 +484,13 @@ class Plotter:
             'I could control the speed well',
             'The training phase was engaging'
         ]
+        palette = sns.color_palette('vlag')
         responses = {
-            'Strongly agree': '#00ff00',
-            'Agree': '#008800',
-            'Neutral': '#000000',
-            'Disagree': '#880000',
-            'Strongly disagree': '#ff0000',
+            'Strongly agree': palette[0],
+            'Agree': palette[1],
+            'Neutral': palette[2],
+            'Disagree': palette[-2],
+            'Strongly disagree': palette[-1],
         }
 
         columns = list(responses.keys()) + ['Model', 'Question']
@@ -787,10 +788,10 @@ def main():
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     plotter = Plotter(participants)
-    plotter.plot_fitts_metrics(VALIDATION)
-    plotter.plot_throughput_over_time()
-    plotter.plot_dof_activation_heatmap(VALIDATION)
-    plotter.plot_loss()
+    # plotter.plot_fitts_metrics(VALIDATION)
+    # plotter.plot_throughput_over_time()
+    # plotter.plot_dof_activation_heatmap(VALIDATION)
+    # plotter.plot_loss()
     plotter.plot_survey_results()
     
     plt.show()
