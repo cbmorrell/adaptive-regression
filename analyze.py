@@ -317,6 +317,32 @@ class Plotter:
                 x_hist_ax = axs[0, 0]
                 y_hist_ax = axs[1, 1]
                 axs[0, 1].set_axis_off()    # hide unused axis
+                cbar = True
+            else:
+                assert axs is not None, 'axs not defined.'
+                heatmap_ax = axs[model_idx]
+                cbar = model == models[-1]
+                x_hist_ax = None
+                y_hist_ax = None
+
+
+            # Flip heatmap y bins so they align with 1D histograms and show bins in ascending order
+            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
+            heatmap = sns.heatmap(np.flip(x_y_counts, axis=0), ax=heatmap_ax,
+                                  cmap=sns.light_palette('seagreen', as_cmap=True), norm=norm, cbar=cbar)
+
+            # Formatting
+            if cbar:
+                colorbar = heatmap.collections[0].colorbar
+                colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
+                colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
+
+            heatmap_ax.set_xticks(bin_ticks, bins, rotation=90)
+            heatmap_ax.set_yticks(bin_ticks, np.flip(bins), rotation=0)
+            heatmap_ax.set_xlabel('Open / Close Activation')
+            heatmap_ax.set_ylabel('Pro / Supination Activation')
+
+            if x_hist_ax is not None and y_hist_ax is not None:
                 x_hist_axs.append(x_hist_ax)
                 y_hist_axs.append(y_hist_ax)
 
@@ -338,35 +364,15 @@ class Plotter:
                 y_hist_ax.set_xscale('log')
                 y_hist_ax.set_xticks(hist_ticks)
                 y_hist_ax.minorticks_off()
-                cbar = True
                 text_x = y_hist_ax.get_position().x0
                 text_y = x_hist_ax.get_position().y0
                 fig.text(text_x, text_y, f"Simultaneity: {100 * simultaneity:.1f}%",
                         ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
             else:
-                assert axs is not None, 'axs not defined.'
-                heatmap_ax = axs[model_idx]
-                cbar = model == models[-1]
                 heatmap_ax.set_title(format_names(model))
                 heatmap_ax.text(0, 1.05, f"Simultaneity: {100 * simultaneity:.1f}%",
                         ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox,
                         transform=heatmap_ax.transAxes)
-
-
-            # Flip heatmap y bins so they align with 1D histograms and show bins in ascending order
-            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
-            heatmap = sns.heatmap(np.flip(x_y_counts, axis=0), ax=heatmap_ax,
-                                  cmap=sns.light_palette('seagreen', as_cmap=True), norm=norm, cbar=cbar)
-
-            # Formatting
-            heatmap_ax.set_xticks(bin_ticks, bins, rotation=90)
-            heatmap_ax.set_yticks(bin_ticks, np.flip(bins), rotation=0)
-            heatmap_ax.set_xlabel('Open / Close Activation')
-            heatmap_ax.set_ylabel('Pro / Supination Activation')
-            if cbar:
-                colorbar = heatmap.collections[0].colorbar
-                colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
-                colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
             
         # Need to go through and align all histogram axes with eachother for consistent dimensions across subgrids (if applicable)
         for x_hist_ax, y_hist_ax in zip(x_hist_axs, y_hist_axs):
@@ -821,10 +827,10 @@ def main():
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     plotter = Plotter(participants)
-    # plotter.plot_fitts_metrics(VALIDATION)
-    # plotter.plot_throughput_over_time()
+    plotter.plot_fitts_metrics(VALIDATION)
+    plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
-    # plotter.plot_loss()
+    plotter.plot_loss()
     plotter.plot_survey_results()
     
     plt.show()
