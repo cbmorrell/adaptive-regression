@@ -385,9 +385,11 @@ class Plotter:
 
     def plot_loss(self):
         fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
-        epochs = []
-        losses = []
-        model_labels = []
+        data = {
+            'Epochs': [],
+            'L1 Loss': [],
+            'Model': []
+        }
         for model in MODELS:
             for participant in self.participants:
                 config = make_config(participant, model)
@@ -397,15 +399,14 @@ class Plotter:
                 epoch_timestamps = np.unique(batch_timestamps)
                 assert (len(epoch_timestamps) == config.NUM_TRAIN_EPOCHS) or config.model_is_adaptive, f"Unexpected number of epochs in loss file. Expected {config.NUM_TRAIN_EPOCHS}, but got {len(epoch_timestamps)} for {participant.id} {model}."
                 epoch_losses = [np.mean(batch_losses[batch_timestamps == timestamp]) for timestamp in epoch_timestamps]
-                epochs.extend(list(range(len(epoch_timestamps))))
-                losses.extend(epoch_losses)
-                model_labels.extend(format_names([model for _ in range(len(epoch_timestamps))]))
+                data['Epochs'].extend(list(range(len(epoch_timestamps))))
+                data['L1 Loss'].extend(epoch_losses)
+                data['Model'].extend(format_names([model for _ in range(len(epoch_timestamps))]))
+                # if config.model_is_adaptive:
+                #     length.append(len(epoch_timestamps))
+                #     colors.append(self.model_palette[format_names(model)])
 
-        df = pd.DataFrame({
-            'Epochs': epochs,
-            'L1 Loss': losses,
-            'Model': model_labels
-        })
+        df = pd.DataFrame(data)
         sns.lineplot(df, x='Epochs', y='L1 Loss', hue='Model', ax=ax, palette=self.model_palette)
         ax.axvline(Config.NUM_TRAIN_EPOCHS, color='black', linestyle='--', label='SGT Epochs')
         ax.annotate('SGT Training Epochs', 
@@ -827,10 +828,9 @@ def main():
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     plotter = Plotter(participants)
-    # plotter.plot_fitts_metrics(VALIDATION)
-    # plotter.plot_throughput_over_time()
+    plotter.plot_fitts_metrics(VALIDATION)
+    plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
-    plt.show()
     plotter.plot_loss()
     plotter.plot_survey_results()
     
