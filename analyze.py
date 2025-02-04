@@ -271,7 +271,7 @@ class Plotter:
             axs = None
             outer_grid = fig.add_gridspec(nrows=2, ncols=2)
         else:
-            fig, axs = plt.subplots(nrows=1, ncols=4, layout='constrained', figsize=(16, 4))
+            fig, axs = plt.subplots(nrows=1, ncols=4, layout='constrained', figsize=(12, 3))
             outer_grid = None
 
         width_ratios = [2, 1]
@@ -370,10 +370,10 @@ class Plotter:
                         ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
             else:
                 heatmap_ax.set_title(format_names(model))
-                heatmap_ax.text(0, 1.05, f"Simultaneity: {100 * simultaneity:.1f}%",
-                        ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox,
+                heatmap_ax.text(1.05, 1.05, f"{100 * simultaneity:.1f}%",
+                        ha='right', va='bottom', fontsize=12, fontweight='bold', bbox=bbox,
                         transform=heatmap_ax.transAxes)
-            
+
         # Need to go through and align all histogram axes with eachother for consistent dimensions across subgrids (if applicable)
         for x_hist_ax, y_hist_ax in zip(x_hist_axs, y_hist_axs):
             x_hist_ax.sharey(x_hist_axs[0])
@@ -827,9 +827,10 @@ def main():
     calculate_participant_metrics(participants)
     # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     plotter = Plotter(participants)
-    plotter.plot_fitts_metrics(VALIDATION)
-    plotter.plot_throughput_over_time()
+    # plotter.plot_fitts_metrics(VALIDATION)
+    # plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
+    plt.show()
     plotter.plot_loss()
     plotter.plot_survey_results()
     
