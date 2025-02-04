@@ -98,7 +98,7 @@ class Plotter:
                 timestamps = np.array([0] + fitts_metrics['time'])  # start with a timestamp of 0
                 align_mask = np.searchsorted(timestamps, t, side='right') - 1    # hold throughput until a new trial is completed
                 throughput = throughput[align_mask]
-                throughput = moving_average(throughput, window_size=30)
+                throughput = moving_average(throughput, window_size=60)
                 data['Throughput (bits/s)'].extend(throughput)
                 data['Time (seconds)'].extend(np.linspace(0, t[-1], num=throughput.shape[0]))
                 data['Model'].extend([format_names(model) for _ in range(throughput.shape[0])])
