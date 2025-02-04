@@ -127,7 +127,7 @@ class Plotter:
             'Completion Rate (%)': [],
             'Action Interference': [],
             'Drift': [],
-            'Cost of Simultaneity': []
+            'Simultaneity Gain': []
         }
         trial_info = {
             'Model': [],
@@ -152,7 +152,7 @@ class Plotter:
                 metrics['Completion Rate (%)'].append(fitts_metrics['completion_rate'] * 100)   # express as %
                 metrics['Action Interference'].append(np.nanmean(fitts_metrics['action_interference']))
                 metrics['Drift'].append(np.nanmean(fitts_metrics['drift']))
-                metrics['Cost of Simultaneity'].append(np.mean(fitts_metrics['cost_of_simultaneity']))
+                metrics['Simultaneity Gain'].append(np.nanmean(fitts_metrics['simultaneity_gain']))
 
         data = {}
         data.update(metrics)
@@ -627,7 +627,7 @@ class Log:
             'action_interference': [],
             'drift': [],
             'time': [],
-            'cost_of_simultaneity': []
+            'simultaneity_gain': []
         }
         
         total_time = 0
@@ -640,7 +640,7 @@ class Log:
             fitts_results['efficiency'].append(t.calculate_efficiency())
             fitts_results['action_interference'].append(t.calculate_action_interference())
             fitts_results['drift'].append(t.calculate_drift())
-            fitts_results['cost_of_simultaneity'].append(t.calculate_cost_of_simultaneity())
+            fitts_results['simultaneity_gain'].append(t.calculate_simultaneity_gain())
 
             total_time += t.trial_time
             fitts_results['time'].append(total_time)
@@ -724,14 +724,13 @@ class Trial:
             return np.nan
         return np.mean(drift_predictions)
 
-    def calculate_cost_of_simultaneity(self):
+    def calculate_simultaneity_gain(self):
         simultaneous_mask = np.all(np.abs(self.predictions) > 1e-3, axis=1)    # predictions are never exactly 0
         simultaneity = np.sum(simultaneous_mask) / self.predictions.shape[0]
-        # return 1 - (simultaneity * self.calculate_efficiency() * (1 - self.calculate_action_interference()))
-        # return self.calculate_throughput() * (self.calculate_action_interference() + self.calculate_drift() + (1 - self.calculate_efficiency()))
-        # return self.calculate_efficiency() / simultaneity
-        # return simultaneity / (self.calculate_efficiency() * self.calculate_throughput())
-        return simultaneity / self.calculate_efficiency()
+        if simultaneity == 0:
+            # Can't determine simultaneity gain for this trial - exclude it
+            return np.nan
+        return self.calculate_efficiency() / simultaneity
 
 
 def moving_average(a, window_size = 3):
