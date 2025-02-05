@@ -300,6 +300,7 @@ class Plotter:
 
         assert vmin is not None and vmax is not None, 'Error calculating min and max values for colorbar normalization.'
         vmin = max(vmin, 1) # can't have a log value of 0
+        norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
 
         for model_idx, model in enumerate(models):
             model_predictions = predictions[model]
@@ -327,7 +328,6 @@ class Plotter:
 
 
             # Flip heatmap y bins so they align with 1D histograms and show bins in ascending order
-            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
             heatmap = sns.heatmap(np.flip(x_y_counts, axis=0), ax=heatmap_ax,
                                   cmap=sns.light_palette('seagreen', as_cmap=True), norm=norm, cbar=cbar)
 
@@ -339,8 +339,8 @@ class Plotter:
 
             heatmap_ax.set_xticks(bin_ticks, bins, rotation=90)
             heatmap_ax.set_yticks(bin_ticks, np.flip(bins), rotation=0)
-            heatmap_ax.set_xlabel('Open / Close Activation')
-            heatmap_ax.set_ylabel('Pro / Supination Activation')
+            heatmap_ax.set_xlabel('Open / Close')
+            heatmap_ax.set_ylabel('Wrist Rotation')
 
             if x_hist_ax is not None and y_hist_ax is not None:
                 x_hist_axs.append(x_hist_ax)
@@ -370,8 +370,8 @@ class Plotter:
                         ha='center', va='bottom', fontsize=12, fontweight='bold', bbox=bbox)
             else:
                 heatmap_ax.set_title(format_names(model))
-                heatmap_ax.text(1.05, 1.05, f"{100 * simultaneity:.1f}%",
-                        ha='right', va='bottom', fontsize=12, fontweight='bold', bbox=bbox,
+                heatmap_ax.text(0, -0.25, f"{100 * simultaneity:.1f}%", # x and y values were set manually, so may require adjusting
+                        ha='right', va='top', fontsize=12, fontweight='bold', bbox=bbox,
                         transform=heatmap_ax.transAxes)
 
         # Need to go through and align all histogram axes with eachother for consistent dimensions across subgrids (if applicable)
@@ -825,10 +825,9 @@ def main():
         participants.append(Participant.load(participant_files[0]))
 
     calculate_participant_metrics(participants)
-    # TODO: Maybe look at pulling apart performance for novice vs. more experienced users
     plotter = Plotter(participants)
-    plotter.plot_fitts_metrics(VALIDATION)
-    plotter.plot_throughput_over_time()
+    # plotter.plot_fitts_metrics(VALIDATION)
+    # plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
     plotter.plot_loss()
     plotter.plot_survey_results()
