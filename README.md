@@ -1,4 +1,4 @@
-# Adaptive Regression
+# CIIL for Regression
 
 ## Publication
 
@@ -6,7 +6,7 @@
 
 **License:** Creative Commons
 
-This repository hosts code for the publication: **TODO**. Please cite this publication if using this for research purposes. For any questions related to the work or this repository, please reach out to <cmorrell@unb.ca>
+This repository hosts code for the publication: **TODO**. Here we investigate context-informed incremental learning (CIIL) for regression-based myoelectric control. Please cite this publication if using this for research purposes. For any questions related to the work or this repository, please reach out to <cmorrell@unb.ca>
 
 ## Usage
 
