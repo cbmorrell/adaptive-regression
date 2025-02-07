@@ -804,6 +804,7 @@ def calculate_participant_metrics(participants):
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
+    parser.add_argument('-pl', '--presentation_layout', action='store_true', help='Flag to make plots for a presentation. If not set, defaults to report format.')
     args = parser.parse_args()
     print(args)
 
@@ -825,9 +826,9 @@ def main():
         participants.append(Participant.load(participant_files[0]))
 
     calculate_participant_metrics(participants)
-    plotter = Plotter(participants)
-    # plotter.plot_fitts_metrics(VALIDATION)
-    # plotter.plot_throughput_over_time()
+    plotter = Plotter(participants, presentation_layout=args.presentation_layout)
+    plotter.plot_fitts_metrics(VALIDATION)
+    plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
     plotter.plot_loss()
     plotter.plot_survey_results()
