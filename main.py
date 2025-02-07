@@ -21,7 +21,6 @@ def main():
     run_parser.add_argument('participant', type=str, help='Path to configuration file.')
     run_parser.add_argument('condition_idx', type=int, help='Index of current condition (starts at 0).')
     run_parser.add_argument('stage', type=str, choices=('sgt', 'adaptation', 'validation'), help='Stage of experiment.')
-    run_parser.add_argument('--analyze', action='store_true', help='Flag to call analyze_hardware() method.')
 
     args = parser.parse_args()
     print(args)
@@ -40,8 +39,6 @@ def main():
         smm.create_variable(*sm_item)
 
     online_data_handler, _ = experiment.setup_live_processing()
-    if args.analyze:
-        online_data_handler.analyze_hardware()
     
     online_data_handler.visualize(num_samples=experiment.config.device.fs, block=True)
     if args.stage == 'sgt':
