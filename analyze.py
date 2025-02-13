@@ -3,8 +3,8 @@ import math
 import pickle
 from argparse import ArgumentParser
 import textwrap
-from enum import Enum
 
+import pygame
 import torch
 import pandas as pd
 import libemg
@@ -16,7 +16,7 @@ import matplotlib.patches as mpatches
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
-from utils.adaptation import TIMEOUT, DWELL_TIME, Memory, ADAPTATION_TIME, VALIDATION_TIME
+from utils.adaptation import TIMEOUT, DWELL_TIME, Memory, ADAPTATION_TIME, VALIDATION_TIME, TARGET_RADIUS, ISOFITTS_RADIUS
 from utils.models import MLP
 from experiment import MODELS, Participant, make_config, Config
 
@@ -65,7 +65,6 @@ class Plotter:
 
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
-
 
     def plot_throughput_over_stage(self, stage, ax = None):
         if stage == ADAPTATION:
@@ -733,6 +732,16 @@ class Trial:
         return self.calculate_efficiency() / simultaneity
 
 
+class ScreenshotFitts(libemg.environments.fitts.ISOFitts):
+    def _draw(self):
+        super()._draw()
+        pygame.image.save(self.screen, Path(RESULTS_DIRECTORY).joinpath('fitts.png'))
+
+    def _draw_cursor(self):
+        color = self.config.cursor_in_target_color if self.dwell_timer is not None else self.config.cursor_color
+        self._draw_circle(self.cursor, color, draw_radius=False)
+
+
 def moving_average(a, window_size = 3):
     ma = np.cumsum(a)
     ma[window_size:] = ma[window_size:] - ma[:-window_size]
@@ -785,6 +794,34 @@ def plot_pilot_distance_vs_proportional_control():
     plt.scatter(distances, predictions)
 
 
+def save_fitts_screenshot():
+    # Start up the Fitts environment, take a screenshot, and close
+    config = libemg.environments.fitts.FittsConfig(
+        num_trials=1,
+        width=1500,
+        height=750,
+        target_radius=TARGET_RADIUS,
+        game_time=3,
+        mapping='polar+',
+        target_color=(0, 0, 0),
+        background_color=(255, 255, 255)
+    )
+    controller = libemg.environments.controllers.KeyboardController()
+    prediction_map = {
+        pygame.K_UP: 'N',
+        pygame.K_DOWN: 'S',
+        pygame.K_RIGHT: 'E',
+        pygame.K_LEFT: 'W',
+        -1: 'NM'
+    }
+    fitts = ScreenshotFitts(controller, config, prediction_map=prediction_map, target_distance_radius=ISOFITTS_RADIUS)
+    fitts.polygon_angles = np.linspace(0, 2 * math.pi, num=2000)
+    fitts.run()
+    # NOTE: The pygame window will likely stay open even after quitting and continuing on the main thread
+    print('Fitts screenshot saved.')
+    
+
+
 def calculate_participant_metrics(participants):
     ages = []
     males = 0
@@ -805,6 +842,7 @@ def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
     parser.add_argument('-pl', '--presentation_layout', action='store_true', help='Flag to make plots for a presentation. If not set, defaults to report format.')
+    parser.add_argument('--fitts', action='store_true', help='Flag to launch Fitts window and store a screenshot.')
     args = parser.parse_args()
     print(args)
 
@@ -825,6 +863,8 @@ def main():
         assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
         participants.append(Participant.load(participant_files[0]))
 
+    if args.fitts:
+        save_fitts_screenshot()
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, presentation_layout=args.presentation_layout)
     plotter.plot_fitts_metrics(VALIDATION)
