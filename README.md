@@ -90,6 +90,7 @@ python analyze.py [options]
 
 - `-p, --participants` (default: `'all'`): Specify a participant or a list of participants to evaluate. By default, all participants are included.
 - `-pl, --presentation_layout` (flag): Enables a presentation-friendly plotting style. If not set, the script generates plots in a report format.
+- `--fitts` (flag): If set, opens a `pygame` window and takes a screenshot of the Fitts interface.
 
 ### Utility Functions
 
