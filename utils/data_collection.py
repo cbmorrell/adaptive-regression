@@ -1,3 +1,5 @@
+import math
+
 import libemg
 import numpy as np
 
@@ -39,7 +41,6 @@ class Device:
 
 
 def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_time=5, FPS=24):
-    import math
     coordinates = []
     duration = int(cycles*period + rest_time)
     t = np.linspace(0, duration-rest_time, FPS*(duration-rest_time))
