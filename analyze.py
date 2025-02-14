@@ -401,18 +401,18 @@ class Plotter:
                 data['Epochs'].extend(list(range(len(epoch_timestamps))))
                 data['L1 Loss'].extend(epoch_losses)
                 data['Model'].extend(format_names([model for _ in range(len(epoch_timestamps))]))
-                # if config.model_is_adaptive:
-                #     length.append(len(epoch_timestamps))
-                #     colors.append(self.model_palette[format_names(model)])
 
         df = pd.DataFrame(data)
         sns.lineplot(df, x='Epochs', y='L1 Loss', hue='Model', ax=ax, palette=self.model_palette)
         ax.axvline(Config.NUM_TRAIN_EPOCHS, color='black', linestyle='--', label='SGT Epochs')
+        text_y = ax.get_yticks()[-2]
         ax.annotate('SGT Training Epochs', 
-             xy=(Config.NUM_TRAIN_EPOCHS, ax.get_yticks()[-2]),
-             xytext=(Config.NUM_TRAIN_EPOCHS + 100, ax.get_yticks()[-2]),  # offset for better placement
+             xy=(Config.NUM_TRAIN_EPOCHS, text_y),
+             xytext=(Config.NUM_TRAIN_EPOCHS + 100, text_y),  # offset for better placement
              arrowprops=dict(arrowstyle='->', color='black'),
              bbox=dict(boxstyle='round,pad=0.3', edgecolor='black', facecolor='white'),
+             ha='left',
+             va='center',
              fontsize=10)
         ax.set_title('Training Loss')
         self._save_fig(fig, 'loss.png')
@@ -867,9 +867,9 @@ def main():
 
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, presentation_layout=args.presentation_layout)
-    plotter.plot_fitts_metrics(VALIDATION)
-    plotter.plot_throughput_over_time()
-    plotter.plot_dof_activation_heatmap(VALIDATION)
+    # plotter.plot_fitts_metrics(VALIDATION)
+    # plotter.plot_throughput_over_time()
+    # plotter.plot_dof_activation_heatmap(VALIDATION)
     plotter.plot_loss()
     plotter.plot_survey_results()
     
