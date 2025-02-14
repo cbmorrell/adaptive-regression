@@ -766,8 +766,7 @@ def format_names(models):
             ('Ciil', 'CIIL'),
             ('Within', 'W'),
             ('Combined', 'C'),
-            ('Subject-', 'S'),
-            ('Uc', 'UC')
+            ('Subject-', 'S')
         )
         formatted_name = name.title()
         for replacement in replacements:
@@ -865,6 +864,7 @@ def main():
 
     if args.fitts:
         save_fitts_screenshot()
+
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, presentation_layout=args.presentation_layout)
     plotter.plot_fitts_metrics(VALIDATION)

@@ -19,7 +19,7 @@ from utils.adaptation import Memory, WROTE, WAITING, DONE_TASK, make_pseudo_labe
 from utils.data_collection import Device, get_frame_coordinates
 
 
-MODELS = ('within-sgt', 'combined-sgt', 'o-ciil', 'uc-ciil')
+MODELS = ('within-sgt', 'combined-sgt', 'o-ciil', 't-ciil')
 
 
 @dataclass(frozen=True)
