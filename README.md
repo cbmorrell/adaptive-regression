@@ -94,4 +94,8 @@ python analyze.py [options]
 
 ### Utility Functions
 
-Although not needed to run the experiment, some of the logic, such as neural network creation and adaptation, are handled in utility functions found in the `utils` directory. These functions are used throughout the main scripts, and are broken up into different modules for convenience.
+Although not needed to run the experiment, some of the logic, such as neural network creation and adaptation, are handled in utility functions found in the `utils` directory. These functions are used throughout the main scripts, and are broken up into different modules for convenience. A brief description of each module is provided below.
+
+- `adaptation.py`: Handles real-time adaptation logic, including the creation of pseudo-labels.
+- `data_collection.py`: Convenience interface for handling multiple devices and creating data collection videos.
+- `models.py`: PyTorch interface for neural network architecture.
