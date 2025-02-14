@@ -867,9 +867,9 @@ def main():
 
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, presentation_layout=args.presentation_layout)
-    # plotter.plot_fitts_metrics(VALIDATION)
-    # plotter.plot_throughput_over_time()
-    # plotter.plot_dof_activation_heatmap(VALIDATION)
+    plotter.plot_fitts_metrics(VALIDATION)
+    plotter.plot_throughput_over_time()
+    plotter.plot_dof_activation_heatmap(VALIDATION)
     plotter.plot_loss()
     plotter.plot_survey_results()
     
