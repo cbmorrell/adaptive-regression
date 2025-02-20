@@ -1,0 +1,16 @@
+[project]
+name = "adaptive-regression"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "libemg",
+    "pandas>=2.2.3",
+    "pygame>=2.6.1",
+    "seaborn>=0.13.2",
+    "torch>=2.6.0",
+]
+
+[tool.uv.sources]
+libemg = { path = "../libemg" }
