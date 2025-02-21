@@ -5,12 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "libemg",
+    "libemg==2.0",  # exact commit during data collection: 7b4a727a2c95e29b354f3f25f251fcace0c8b62d
     "pandas>=2.2.3",
     "pygame>=2.6.1",
     "seaborn>=0.13.2",
     "torch>=2.6.0",
 ]
-
-[tool.uv.sources]
-libemg = { path = "../libemg" }
