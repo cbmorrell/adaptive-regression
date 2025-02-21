@@ -6,6 +6,23 @@
 
 This repository hosts code for the publication: **TODO**. Here we investigate context-informed incremental learning (CIIL) for regression-based myoelectric control. Please cite this publication if using this for research purposes. For any questions related to the work or this repository, please reach out to <cmorrell@unb.ca>
 
+## Installation
+
+This project is managed using `uv`, [a Python project and package manager](https://github.com/astral-sh/uv). Installation is easiest with `uv`, but requirements can be generated for other workflows.
+
+### `pyproject.toml`
+
+To setup with `uv`, simply run `uv run` in a shell and a virtual environment should be automatically created. `poetry` should work natively as well, as it supports `pyproject.toml`.
+
+### `requirements.txt`
+
+For workflows using `requirements.txt`, a requirements file can be generated using the following commands:
+
+```sh
+pip install pip-tools
+pip-compile pyproject.toml
+```
+
 ## Usage
 
 This repository contains two primary scripts:
