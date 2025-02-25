@@ -24,13 +24,16 @@ from experiment import MODELS, Participant, make_config, Config
 RESULTS_DIRECTORY = 'results'
 ADAPTATION = 'adaptation'
 VALIDATION = 'validation'
+REPORT = 'report'
+PRESENTATION = 'presentation'
+THESIS = 'thesis'
 
 
 class Plotter:
-    def __init__(self, participants, dpi = 400, presentation_layout = False):
+    def __init__(self, participants, dpi = 400, layout = REPORT):
         self.participants = participants
         self.dpi = dpi
-        self.presentation_layout = presentation_layout
+        self.layout = layout
         self.validation_models = MODELS
         self.adaptation_models = (MODELS[2], MODELS[3])
 
@@ -134,7 +137,14 @@ class Plotter:
             'Subject ID': []
         }
 
-        fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=(12, 8), sharex=True)
+        if self.layout == THESIS:
+            figsize = (8, 8)
+            xtick_rotation = 90
+        else:
+            figsize = (12, 8)
+            xtick_rotation = 0
+
+        fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=figsize, sharex=True)
         for model in models:
             for participant in self.participants:
                 log = self.read_log(participant, model, stage)
@@ -212,6 +222,8 @@ class Plotter:
             if '%' in metric:
                 percent_ticks = [tick for tick in ax.get_yticks() if tick <= 100 and tick >= 0]
                 ax.set_yticks(percent_ticks)
+
+            ax.tick_params(axis='x', rotation=xtick_rotation)
 
 
         symbol_handles = [
@@ -840,7 +852,7 @@ def calculate_participant_metrics(participants):
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
-    parser.add_argument('-pl', '--presentation_layout', action='store_true', help='Flag to make plots for a presentation. If not set, defaults to report format.')
+    parser.add_argument('-l', '--layout', choices=(REPORT, PRESENTATION, THESIS), default=REPORT, help='Layout of plots. If not set, defaults to report format.')
     parser.add_argument('--fitts', action='store_true', help='Flag to launch Fitts window and store a screenshot.')
     args = parser.parse_args()
     print(args)
@@ -866,7 +878,7 @@ def main():
         save_fitts_screenshot()
 
     calculate_participant_metrics(participants)
-    plotter = Plotter(participants, presentation_layout=args.presentation_layout)
+    plotter = Plotter(participants, layout=args.layout)
     plotter.plot_fitts_metrics(VALIDATION)
     plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
