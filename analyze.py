@@ -290,9 +290,16 @@ class Plotter:
             fig = plt.figure(figsize=(10, 10), constrained_layout=True)
             axs = None
             outer_grid = fig.add_gridspec(nrows=2, ncols=2)
+            axis_cbar = True
+        elif self.layout == THESIS:
+            fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained', figsize=(6, 6.5))
+            axs = np.ravel(axs)
+            outer_grid = None
+            axis_cbar = False
         else:
             fig, axs = plt.subplots(nrows=1, ncols=4, layout='constrained', figsize=(12, 3))
             outer_grid = None
+            axis_cbar = True
 
         width_ratios = [2, 1]
         height_ratios = [1, 2]
@@ -342,7 +349,7 @@ class Plotter:
             else:
                 assert axs is not None, 'axs not defined.'
                 heatmap_ax = axs[model_idx]
-                cbar = model == models[-1]
+                cbar = model == models[-1] and axis_cbar
                 x_hist_ax = None
                 y_hist_ax = None
 
@@ -356,6 +363,10 @@ class Plotter:
                 colorbar = heatmap.collections[0].colorbar
                 colorbar.ax.yaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
                 colorbar.ax.yaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
+            elif not axis_cbar and model == models[-1]:
+                colorbar = fig.colorbar(heatmap.collections[0], ax=axs[2:], orientation='horizontal')
+                colorbar.ax.xaxis.set_minor_locator(NullLocator())  # disable minor (logarithmic) ticks
+                colorbar.ax.xaxis.set_major_formatter(PercentFormatter(xmax=x_predictions.shape[0], decimals=1))
 
             heatmap_ax.set_xticks(bin_ticks, bins, rotation=90)
             heatmap_ax.set_yticks(bin_ticks, np.flip(bins), rotation=0)
