@@ -565,7 +565,12 @@ class Plotter:
         }
 
         columns = list(responses.keys()) + ['Model', 'Question']
-        fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(8, 6), sharex=True, sharey=True)
+        
+        if self.layout == PRESENTATION:
+            fig, axs = plt.subplots(nrows=2, ncols=3, layout='constrained', figsize=(12, 4), sharex=True, sharey=True)
+        else:
+            fig, axs = plt.subplots(nrows=3, ncols=2, layout='constrained', figsize=(8, 6), sharex=True, sharey=True)
+
         for question, ax in zip(questions, np.ravel(axs)):
             data = {column: [] for column in columns}
 
@@ -899,10 +904,10 @@ def main():
 
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, layout=args.layout)
-    plotter.plot_fitts_metrics(VALIDATION)
-    plotter.plot_throughput_over_time()
-    plotter.plot_dof_activation_heatmap(VALIDATION)
-    plotter.plot_loss()
+    # plotter.plot_fitts_metrics(VALIDATION)
+    # plotter.plot_throughput_over_time()
+    # plotter.plot_dof_activation_heatmap(VALIDATION)
+    # plotter.plot_loss()
     plotter.plot_survey_results()
     
     plt.show()
