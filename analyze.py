@@ -63,6 +63,11 @@ class Plotter:
             loc = 'upper center'
             bbox_to_anchor = (0.5, -0.15)
             ncols = len(self.validation_models)
+        elif self.layout == PRESENTATION:
+            fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(8, 2))
+            loc = 'center left'
+            bbox_to_anchor = (1, 0.5)
+            ncols = 1
         else:
             fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(12, 4))
             loc = 'center left'
@@ -904,10 +909,11 @@ def main():
 
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, layout=args.layout)
-    # plotter.plot_fitts_metrics(VALIDATION)
-    # plotter.plot_throughput_over_time()
-    # plotter.plot_dof_activation_heatmap(VALIDATION)
-    # plotter.plot_loss()
+    plotter.plot_fitts_metrics(VALIDATION)
+    plotter.plot_throughput_over_time()
+    plt.show()
+    plotter.plot_dof_activation_heatmap(VALIDATION)
+    plotter.plot_loss()
     plotter.plot_survey_results()
     
     plt.show()
