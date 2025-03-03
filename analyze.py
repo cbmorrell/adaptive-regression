@@ -154,9 +154,18 @@ class Plotter:
         if self.layout == THESIS:
             figsize = (8, 8)
             xtick_rotation = 90
+            bar_tip_multiplier = 0.02
+            bar_text_multiplier = 0.02
+        elif self.layout == PRESENTATION:
+            figsize = (12.5, 5)
+            xtick_rotation = 0
+            bar_tip_multiplier = 0.01
+            bar_text_multiplier = 0.06
         else:
             figsize = (12, 8)
             xtick_rotation = 0
+            bar_tip_multiplier = 0.02
+            bar_text_multiplier = 0.02
 
         fig, axs = plt.subplots(nrows=2, ncols=4, layout='constrained', figsize=figsize, sharex=True)
         for model in models:
@@ -228,9 +237,9 @@ class Plotter:
                     compared_models = [formatted_model_names.index(compared_model) for compared_model in comparison.split(' - ')]
                     x1, x2 = compared_models
                     bar_height = (y_axis_range * 0.07 * level) + top
-                    bar_tips = bar_height - (y_axis_range * 0.02)
+                    bar_tips = bar_height - (y_axis_range * bar_tip_multiplier)
                     ax.plot([x1, x1, x2, x2], [bar_tips, bar_height, bar_height, bar_tips], linewidth=1, c='k')
-                    ax.text((x1 + x2) * 0.5, bar_height - (y_axis_range * 0.02), symbol, ha='center', va='bottom', c='k')
+                    ax.text((x1 + x2) * 0.5, bar_height - (y_axis_range * bar_text_multiplier), symbol, ha='center', va='bottom', c='k')
                     level += 1
 
             if '%' in metric:
@@ -239,15 +248,19 @@ class Plotter:
 
             ax.tick_params(axis='x', rotation=xtick_rotation)
 
-
         symbol_handles = [
             mlines.Line2D([], [], color=meanprops['markerfacecolor'], marker=meanprops['marker'], linewidth=0, label='Mean'),
             mlines.Line2D([], [], markerfacecolor='white', markeredgecolor='black', marker='o', linewidth=0, label='Outlier'),
         ]
-        fig.legend(handles=symbol_handles, title='Symbols', loc='outside upper left', ncols=len(symbol_handles))
         color_legend = axs[3].get_legend()
-        fig.legend(handles=color_legend.legend_handles, title='Adaptive', loc='outside upper right', ncols=len(color_legend.legend_handles))
-        color_legend.remove()
+
+        if self.layout == PRESENTATION:
+            axs[3].legend(handles=color_legend.legend_handles, title='Adaptive', loc='upper left', bbox_to_anchor=(1, 1))
+            axs[7].legend(handles=symbol_handles, title='Symbols', loc='lower left', bbox_to_anchor=(1, 0))
+        else:
+            fig.legend(handles=symbol_handles, title='Symbols', loc='outside upper left', ncols=len(symbol_handles))
+            fig.legend(handles=color_legend.legend_handles, title='Adaptive', loc='outside upper right', ncols=len(color_legend.legend_handles))
+            color_legend.remove()
 
         fig.suptitle('Online Usability Metrics')
         self._save_fig(fig, f"{stage}-fitts-metrics.png")
@@ -910,8 +923,8 @@ def main():
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, layout=args.layout)
     plotter.plot_fitts_metrics(VALIDATION)
-    plotter.plot_throughput_over_time()
     plt.show()
+    plotter.plot_throughput_over_time()
     plotter.plot_dof_activation_heatmap(VALIDATION)
     plotter.plot_loss()
     plotter.plot_survey_results()
