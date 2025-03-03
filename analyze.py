@@ -64,10 +64,10 @@ class Plotter:
             bbox_to_anchor = (0.5, -0.15)
             ncols = len(self.validation_models)
         elif self.layout == PRESENTATION:
-            fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(8, 2))
-            loc = 'center left'
-            bbox_to_anchor = (1, 0.5)
-            ncols = 1
+            fig, axs = plt.subplots(nrows=2, ncols=1, sharey=True, layout='constrained', figsize=(6, 4))
+            loc = 'upper center'
+            bbox_to_anchor = None
+            ncols = None
         else:
             fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(12, 4))
             loc = 'center left'
@@ -76,9 +76,14 @@ class Plotter:
         self.plot_throughput_over_stage(ADAPTATION, ax=axs[0])
         self.plot_throughput_over_stage(VALIDATION, ax=axs[1])
 
-        axs[0].set_xlabel('')   # don't want to duplicate xlabel
+        if self.layout in (THESIS, PRESENTATION):
+            axs[0].set_xlabel('')   # don't want to duplicate xlabel
         axs[0].get_legend().remove()    # don't want duplicate legend
-        sns.move_legend(axs[1], loc=loc, bbox_to_anchor=bbox_to_anchor, ncols=ncols)
+        
+        if self.layout == PRESENTATION:
+            axs[1].get_legend().remove()    # don't want legend for thesis presentation
+        else:
+            sns.move_legend(axs[1], loc=loc, bbox_to_anchor=bbox_to_anchor, ncols=ncols)
 
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
