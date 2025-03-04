@@ -4,7 +4,6 @@ import pickle
 from argparse import ArgumentParser
 import textwrap
 
-import pygame
 import torch
 import pandas as pd
 import libemg
@@ -841,6 +840,7 @@ def format_names(models):
 
 def save_fitts_screenshot():
     # Start up the Fitts environment, take a screenshot, and close
+    import pygame
     config = libemg.environments.fitts.FittsConfig(
         num_trials=1,
         width=1500,
@@ -866,8 +866,6 @@ def save_fitts_screenshot():
     print('Fitts screenshot saved.')
 
 
-
-
 def calculate_participant_metrics(participants):
     ages = []
     males = 0
@@ -882,6 +880,57 @@ def calculate_participant_metrics(participants):
             raise ValueError(f"Unexpected value for participant.sex. Got: {participant.sex}.")
     
     print(f"Age: {min(ages)}-{max(ages)}\tM: {males}\tF: {females}")
+
+
+def make_nn_visualization():
+    try:
+        from graphviz import Digraph
+    except ImportError as e:
+        raise ImportError('graphviz is required to create NN visualization. Install graphviz directly from pip or with the [visualization] dependency specifier.') from e
+
+    fontsize = '40'
+    input_layer_size = 16
+    fc_layer_sizes = [8, 5, 2]
+
+    dot = Digraph(format="png")
+
+    # Create input layer
+    for neuron_idx in range(input_layer_size):
+        dot.node(f"I_{neuron_idx}", '', shape='circle', style='filled', fillcolor='lightblue')
+
+    # Create nodes
+    for layer_idx, layer_size in enumerate(fc_layer_sizes):
+        for neuron_idx in range(layer_size):
+            neuron_name = f"FC{layer_idx}_{neuron_idx}"
+            dot.node(neuron_name, '', shape='circle', style='filled', fillcolor='lightgray')
+            
+        if layer_size == fc_layer_sizes[-1]:
+            break
+
+        dot.node(f"BN{layer_idx}", 'BatchNorm', shape='box', style='filled', fillcolor='lightgreen', fontsize=fontsize)
+        dot.node(f"RELU{layer_idx}", 'ReLU', shape='diamond', style='filled', fillcolor='lightcoral', fontsize=fontsize)
+        dot.node(f"D{layer_idx}", 'Dropout (p=0.2)', shape='diamond', style='dashed', fillcolor='white', fontsize=fontsize)
+
+    # Connect nodes
+    for input_neuron_idx in range(input_layer_size):
+        for fc_neuron_idx in range(fc_layer_sizes[0]):
+            dot.edge(f"I_{input_neuron_idx}", f"FC0_{fc_neuron_idx}")
+
+    for layer_idx in range(len(fc_layer_sizes) - 1):
+        for neuron_idx in range(fc_layer_sizes[layer_idx]):
+            neuron_name = f"FC{layer_idx}_{neuron_idx}"
+            dot.edge(neuron_name, f"BN{layer_idx}")
+
+        dot.edge(f"BN{layer_idx}", f"RELU{layer_idx}")
+        dot.edge(f"RELU{layer_idx}", f"D{layer_idx}")
+
+        for neuron_idx in range(fc_layer_sizes[layer_idx + 1]):
+            dot.edge(f"D{layer_idx}", f"FC{layer_idx + 1}_{neuron_idx}")
+
+    filename = Path(RESULTS_DIRECTORY, 'nn.png').absolute().as_posix()
+    with open(filename, 'wb') as f:
+        f.write(dot.pipe(format='png'))
+    print(f"Saved NN visualization to {filename}.")
 
 
 def main():
@@ -913,6 +962,7 @@ def main():
         save_fitts_screenshot()
 
     calculate_participant_metrics(participants)
+    make_nn_visualization()
     plotter = Plotter(participants, layout=args.layout)
     plotter.plot_fitts_metrics(VALIDATION)
     plotter.plot_throughput_over_time()
