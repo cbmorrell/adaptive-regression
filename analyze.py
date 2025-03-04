@@ -839,20 +839,6 @@ def format_names(models):
     return [format_name(model) for model in models]
 
 
-def plot_pilot_distance_vs_proportional_control():
-    # NOTE: Used to determine appropriate distance to proportional control mapping during piloting
-    with open('/Users/cmorrell/Code/adaptive-regression/data/subject-003/ciil/val_fitts.pkl', 'rb') as f:
-        ciil_data = pickle.load(f)
-
-    predictions = np.linalg.norm(ciil_data['current_direction'], axis=1) / 25
-    target_positions = np.array(ciil_data['goal_target'])[:, :2]
-    cursor_positions = np.array(ciil_data['cursor_position'])[:, :2]
-    distances = np.linalg.norm(target_positions - cursor_positions, axis=1)
-
-    plt.figure()
-    plt.scatter(distances, predictions)
-
-
 def save_fitts_screenshot():
     # Start up the Fitts environment, take a screenshot, and close
     config = libemg.environments.fitts.FittsConfig(
@@ -878,7 +864,8 @@ def save_fitts_screenshot():
     fitts.run()
     # NOTE: The pygame window will likely stay open even after quitting and continuing on the main thread
     print('Fitts screenshot saved.')
-    
+
+
 
 
 def calculate_participant_metrics(participants):
