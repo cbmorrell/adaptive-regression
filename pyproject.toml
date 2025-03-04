@@ -12,3 +12,8 @@ dependencies = [
     "seaborn>=0.13.2",
     "torch>=2.6.0",
 ]
+
+[project.optional-dependencies]
+visualization = [
+    "graphviz>=0.20.3",
+]
