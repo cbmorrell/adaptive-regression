@@ -882,52 +882,60 @@ def calculate_participant_metrics(participants):
     print(f"Age: {min(ages)}-{max(ages)}\tM: {males}\tF: {females}")
 
 
-def make_nn_visualization():
+def make_nn_visualization(visual = 'architecture'):
     try:
         from graphviz import Digraph
     except ImportError as e:
         raise ImportError('graphviz is required to create NN visualization. Install graphviz directly from pip or with the [visualization] dependency specifier.') from e
 
-    fontsize = '40'
-    input_layer_size = 16
-    fc_layer_sizes = [8, 5, 2]
-
     dot = Digraph(format="png")
 
-    # Create input layer
-    for neuron_idx in range(input_layer_size):
-        dot.node(f"I_{neuron_idx}", '', shape='circle', style='filled', fillcolor='lightblue')
+    if visual == 'architecture':
+        fontsize = '60'
+        input_layer_size = 12   # actual size is 48
+        fc_layer_sizes = [16, 8, 5, 2]
+        # Create input layer
+        for neuron_idx in range(input_layer_size):
+            dot.node(f"I_{neuron_idx}", '', shape='circle', style='filled', fillcolor='lightblue')
 
-    # Create nodes
-    for layer_idx, layer_size in enumerate(fc_layer_sizes):
-        for neuron_idx in range(layer_size):
-            neuron_name = f"FC{layer_idx}_{neuron_idx}"
-            dot.node(neuron_name, '', shape='circle', style='filled', fillcolor='lightgray')
-            
-        if layer_size == fc_layer_sizes[-1]:
-            break
+        # Create nodes
+        for layer_idx, layer_size in enumerate(fc_layer_sizes):
+            for neuron_idx in range(layer_size):
+                neuron_name = f"FC{layer_idx}_{neuron_idx}"
+                dot.node(neuron_name, '', shape='circle', style='filled', fillcolor='lightgray')
+                
+            if layer_size == fc_layer_sizes[-1]:
+                break
 
-        dot.node(f"BN{layer_idx}", 'BatchNorm', shape='box', style='filled', fillcolor='lightgreen', fontsize=fontsize)
-        dot.node(f"RELU{layer_idx}", 'ReLU', shape='diamond', style='filled', fillcolor='lightcoral', fontsize=fontsize)
-        dot.node(f"D{layer_idx}", 'Dropout (p=0.2)', shape='diamond', style='dashed', fillcolor='white', fontsize=fontsize)
+            dot.node(f"B{layer_idx}", 'P', shape='box', style='filled', fillcolor='lightblue', fontsize=fontsize)
 
-    # Connect nodes
-    for input_neuron_idx in range(input_layer_size):
-        for fc_neuron_idx in range(fc_layer_sizes[0]):
-            dot.edge(f"I_{input_neuron_idx}", f"FC0_{fc_neuron_idx}")
+        # Connect nodes
+        for input_neuron_idx in range(input_layer_size):
+            for fc_neuron_idx in range(fc_layer_sizes[0]):
+                dot.edge(f"I_{input_neuron_idx}", f"FC0_{fc_neuron_idx}")
 
-    for layer_idx in range(len(fc_layer_sizes) - 1):
-        for neuron_idx in range(fc_layer_sizes[layer_idx]):
-            neuron_name = f"FC{layer_idx}_{neuron_idx}"
-            dot.edge(neuron_name, f"BN{layer_idx}")
+        for layer_idx in range(len(fc_layer_sizes) - 1):
+            current_layer_size = fc_layer_sizes[layer_idx]
+            next_layer_size = fc_layer_sizes[layer_idx + 1]
+            for neuron_idx in range(current_layer_size):
+                neuron_name = f"FC{layer_idx}_{neuron_idx}"
+                for next_neuron_idx in range(next_layer_size):
+                    dot.edge(neuron_name, f"B{layer_idx}")
+                    dot.edge(f"B{layer_idx}", f"FC{layer_idx + 1}_{next_neuron_idx}")
 
-        dot.edge(f"BN{layer_idx}", f"RELU{layer_idx}")
-        dot.edge(f"RELU{layer_idx}", f"D{layer_idx}")
+    elif visual == 'block':
+        fontsize = '40'
+        with dot.subgraph(name='cluster') as c:
+            c.attr(style='filled', fillcolor='lightblue', label='Processing', fontsize='60', fontcolor='black')
+            c.node('BN', 'BatchNorm', shape='box', style='filled', fillcolor='lightgreen', fontsize=fontsize)
+            c.node('RELU', 'ReLU', shape='diamond', style='filled', fillcolor='lightcoral', fontsize=fontsize)
+            c.node('D', 'Dropout', shape='diamond', style='dashed', fillcolor='white', fontsize=fontsize)
+            c.edge('BN', 'RELU')
+            c.edge('RELU', 'D')
+    else:
+        raise ValueError(f"Unexpected value for visualizing neural network architecture. Got: {visual}.")
 
-        for neuron_idx in range(fc_layer_sizes[layer_idx + 1]):
-            dot.edge(f"D{layer_idx}", f"FC{layer_idx + 1}_{neuron_idx}")
-
-    filename = Path(RESULTS_DIRECTORY, 'nn.png').absolute().as_posix()
+    filename = Path(RESULTS_DIRECTORY, f"{visual}.png").absolute().as_posix()
     with open(filename, 'wb') as f:
         f.write(dot.pipe(format='png'))
     print(f"Saved NN visualization to {filename}.")
@@ -938,6 +946,7 @@ def main():
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
     parser.add_argument('-l', '--layout', choices=(REPORT, PRESENTATION, THESIS), default=REPORT, help='Layout of plots. If not set, defaults to report format.')
     parser.add_argument('--fitts', action='store_true', help='Flag to launch Fitts window and store a screenshot.')
+    parser.add_argument('--nn', action='store_true', help='Flag to make NN visualization.')
     args = parser.parse_args()
     print(args)
 
@@ -960,9 +969,11 @@ def main():
 
     if args.fitts:
         save_fitts_screenshot()
+    if args.nn:
+        make_nn_visualization(visual='architecture')
+        make_nn_visualization(visual='block')
 
     calculate_participant_metrics(participants)
-    make_nn_visualization()
     plotter = Plotter(participants, layout=args.layout)
     plotter.plot_fitts_metrics(VALIDATION)
     plotter.plot_throughput_over_time()
