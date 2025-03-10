@@ -791,16 +791,6 @@ class Trial:
         return self.calculate_efficiency() / simultaneity
 
 
-class ScreenshotFitts(libemg.environments.fitts.ISOFitts):
-    def _draw(self):
-        super()._draw()
-        pygame.image.save(self.screen, Path(RESULTS_DIRECTORY).joinpath('fitts.png'))
-
-    def _draw_cursor(self):
-        color = self.config.cursor_in_target_color if self.dwell_timer is not None else self.config.cursor_color
-        self._draw_circle(self.cursor, color, draw_radius=False)
-
-
 def moving_average(a, window_size = 3):
     ma = np.cumsum(a)
     ma[window_size:] = ma[window_size:] - ma[:-window_size]
@@ -838,34 +828,6 @@ def format_names(models):
     return [format_name(model) for model in models]
 
 
-def save_fitts_screenshot():
-    # Start up the Fitts environment, take a screenshot, and close
-    import pygame
-    config = libemg.environments.fitts.FittsConfig(
-        num_trials=1,
-        width=1500,
-        height=750,
-        target_radius=TARGET_RADIUS,
-        game_time=3,
-        mapping='polar+',
-        target_color=(0, 0, 0),
-        background_color=(255, 255, 255)
-    )
-    controller = libemg.environments.controllers.KeyboardController()
-    prediction_map = {
-        pygame.K_UP: 'N',
-        pygame.K_DOWN: 'S',
-        pygame.K_RIGHT: 'E',
-        pygame.K_LEFT: 'W',
-        -1: 'NM'
-    }
-    fitts = ScreenshotFitts(controller, config, prediction_map=prediction_map, target_distance_radius=ISOFITTS_RADIUS)
-    fitts.polygon_angles = np.linspace(0, 2 * math.pi, num=2000)
-    fitts.run()
-    # NOTE: The pygame window will likely stay open even after quitting and continuing on the main thread
-    print('Fitts screenshot saved.')
-
-
 def calculate_participant_metrics(participants):
     ages = []
     males = 0
@@ -882,71 +844,10 @@ def calculate_participant_metrics(participants):
     print(f"Age: {min(ages)}-{max(ages)}\tM: {males}\tF: {females}")
 
 
-def make_nn_visualization(visual = 'architecture'):
-    try:
-        from graphviz import Digraph
-    except ImportError as e:
-        raise ImportError('graphviz is required to create NN visualization. Install graphviz directly from pip or with the [visualization] dependency specifier.') from e
-
-    dot = Digraph(format="png")
-
-    if visual == 'architecture':
-        fontsize = '60'
-        input_layer_size = 12   # actual size is 48
-        fc_layer_sizes = [16, 8, 5, 2]
-        # Create input layer
-        for neuron_idx in range(input_layer_size):
-            dot.node(f"I_{neuron_idx}", '', shape='circle', style='filled', fillcolor='lightblue')
-
-        # Create nodes
-        for layer_idx, layer_size in enumerate(fc_layer_sizes):
-            for neuron_idx in range(layer_size):
-                neuron_name = f"FC{layer_idx}_{neuron_idx}"
-                dot.node(neuron_name, '', shape='circle', style='filled', fillcolor='lightgray')
-                
-            if layer_size == fc_layer_sizes[-1]:
-                break
-
-            dot.node(f"B{layer_idx}", 'P', shape='box', style='filled', fillcolor='lightblue', fontsize=fontsize)
-
-        # Connect nodes
-        for input_neuron_idx in range(input_layer_size):
-            for fc_neuron_idx in range(fc_layer_sizes[0]):
-                dot.edge(f"I_{input_neuron_idx}", f"FC0_{fc_neuron_idx}")
-
-        for layer_idx in range(len(fc_layer_sizes) - 1):
-            current_layer_size = fc_layer_sizes[layer_idx]
-            next_layer_size = fc_layer_sizes[layer_idx + 1]
-            for neuron_idx in range(current_layer_size):
-                neuron_name = f"FC{layer_idx}_{neuron_idx}"
-                for next_neuron_idx in range(next_layer_size):
-                    dot.edge(neuron_name, f"B{layer_idx}")
-                    dot.edge(f"B{layer_idx}", f"FC{layer_idx + 1}_{next_neuron_idx}")
-
-    elif visual == 'block':
-        fontsize = '40'
-        with dot.subgraph(name='cluster') as c:
-            c.attr(style='filled', fillcolor='lightblue', label='Processing', fontsize='60', fontcolor='black')
-            c.node('BN', 'BatchNorm', shape='box', style='filled', fillcolor='lightgreen', fontsize=fontsize)
-            c.node('RELU', 'ReLU', shape='diamond', style='filled', fillcolor='lightcoral', fontsize=fontsize)
-            c.node('D', 'Dropout', shape='diamond', style='dashed', fillcolor='white', fontsize=fontsize)
-            c.edge('BN', 'RELU')
-            c.edge('RELU', 'D')
-    else:
-        raise ValueError(f"Unexpected value for visualizing neural network architecture. Got: {visual}.")
-
-    filename = Path(RESULTS_DIRECTORY, f"{visual}.png").absolute().as_posix()
-    with open(filename, 'wb') as f:
-        f.write(dot.pipe(format='png'))
-    print(f"Saved NN visualization to {filename}.")
-
-
 def main():
     parser = ArgumentParser(prog='Analyze offline data.')
     parser.add_argument('-p', '--participants', default='all', help='List of participants to evaluate.')
     parser.add_argument('-l', '--layout', choices=(REPORT, PRESENTATION, THESIS), default=REPORT, help='Layout of plots. If not set, defaults to report format.')
-    parser.add_argument('--fitts', action='store_true', help='Flag to launch Fitts window and store a screenshot.')
-    parser.add_argument('--nn', action='store_true', help='Flag to make NN visualization.')
     args = parser.parse_args()
     print(args)
 
@@ -966,12 +867,6 @@ def main():
         participant_files = [file for file in Path('data').rglob('participant.json') if participant_id in file.as_posix() and 'archive' not in file.as_posix()]
         assert len(participant_files) == 1, f"Expected a single matching participant file for {participant_id}, but got {participant_files}."
         participants.append(Participant.load(participant_files[0]))
-
-    if args.fitts:
-        save_fitts_screenshot()
-    if args.nn:
-        make_nn_visualization(visual='architecture')
-        make_nn_visualization(visual='block')
 
     calculate_participant_metrics(participants)
     plotter = Plotter(participants, layout=args.layout)
