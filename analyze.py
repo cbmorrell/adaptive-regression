@@ -63,10 +63,10 @@ class Plotter:
             bbox_to_anchor = (0.5, -0.15)
             ncols = len(self.validation_models)
         elif self.layout == PRESENTATION:
-            fig, axs = plt.subplots(nrows=2, ncols=1, sharey=True, layout='constrained', figsize=(6, 4))
-            loc = 'upper center'
-            bbox_to_anchor = None
-            ncols = None
+            fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(10, 3))
+            loc = 'center left'
+            bbox_to_anchor = (1, 0.5)
+            ncols = 1
         else:
             fig, axs = plt.subplots(nrows=1, ncols=2, sharey=True, layout='constrained', figsize=(12, 4))
             loc = 'center left'
@@ -75,14 +75,10 @@ class Plotter:
         self.plot_throughput_over_stage(ADAPTATION, ax=axs[0])
         self.plot_throughput_over_stage(VALIDATION, ax=axs[1])
 
-        if self.layout in (THESIS, PRESENTATION):
+        if self.layout == THESIS:
             axs[0].set_xlabel('')   # don't want to duplicate xlabel
         axs[0].get_legend().remove()    # don't want duplicate legend
-        
-        if self.layout == PRESENTATION:
-            axs[1].get_legend().remove()    # don't want legend for thesis presentation
-        else:
-            sns.move_legend(axs[1], loc=loc, bbox_to_anchor=bbox_to_anchor, ncols=ncols)
+        sns.move_legend(axs[1], loc=loc, bbox_to_anchor=bbox_to_anchor, ncols=ncols)
 
         self._save_fig(fig, 'throughput-over-time.png')
         return fig
@@ -437,7 +433,10 @@ class Plotter:
         return fig
 
     def plot_loss(self):
-        fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
+        if self.layout == PRESENTATION:
+            fig, ax = plt.subplots(layout='constrained', figsize=(7, 3))
+        else:
+            fig, ax = plt.subplots(layout='constrained', figsize=(6, 4))
         data = {
             'Epochs': [],
             'L1 Loss': [],
@@ -469,6 +468,9 @@ class Plotter:
              va='center',
              fontsize=10)
         ax.set_title('Training Loss')
+        if self.layout == PRESENTATION:
+            sns.move_legend(ax, loc='center left', bbox_to_anchor=(1, 0.5))
+
         self._save_fig(fig, 'loss.png')
         return fig
 
