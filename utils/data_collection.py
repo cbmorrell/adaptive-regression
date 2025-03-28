@@ -40,13 +40,13 @@ class Device:
         return p, smi
 
 
-def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_time=5, FPS=24):
+def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_time=5, fps=24):
     coordinates = []
     duration = int(cycles*period + rest_time)
-    t = np.linspace(0, duration-rest_time, FPS*(duration-rest_time))
+    t = np.linspace(0, duration-rest_time, fps*(duration-rest_time))
     cycle = np.sin(2*math.pi*(1/period)*t)
     coordinates.append(cycle)
-    coordinates.append(np.zeros(FPS*rest_time))
+    coordinates.append(np.zeros(fps*rest_time))
 
     coordinates = np.concatenate(coordinates)
     if movement_type == 'within':
