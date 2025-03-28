@@ -40,7 +40,7 @@ class Device:
         return p, smi
 
 
-def get_frame_coordinates(movement_type = 'within', period=2, cycles=10, rest_time=5, fps=24):
+def get_frame_coordinates(movement_type = 'within', period = 2, cycles = 10, rest_time = 5, fps = 24):
     coordinates = []
     duration = int(cycles*period + rest_time)
     t = np.linspace(0, duration-rest_time, fps*(duration-rest_time))
