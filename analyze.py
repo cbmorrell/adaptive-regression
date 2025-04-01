@@ -15,7 +15,7 @@ import matplotlib.patches as mpatches
 from matplotlib.ticker import PercentFormatter, NullLocator
 import seaborn as sns
 
-from utils.adaptation import TIMEOUT, DWELL_TIME, Memory, ADAPTATION_TIME, VALIDATION_TIME, TARGET_RADIUS, ISOFITTS_RADIUS
+from utils.adaptation import TIMEOUT, DWELL_TIME, Memory, ADAPTATION_TIME, VALIDATION_TIME
 from utils.models import MLP
 from experiment import MODELS, Participant, make_config, Config
 
