@@ -12,7 +12,7 @@ This project is managed using `uv`, [a Python project and package manager](https
 
 ### `pyproject.toml`
 
-To setup with `uv`, simply run `uv run` in a shell and a virtual environment should be automatically created. `poetry` should work natively as well, as it supports `pyproject.toml`.
+To setup with `uv`, simply run `uv sync` in a shell and a virtual environment should be automatically created. `poetry` should work natively as well, as it supports `pyproject.toml`.
 
 ### `requirements.txt`
 
