@@ -1,7 +1,7 @@
 [project]
 name = "adaptive-regression"
 version = "0.1.0"
-description = "Add your description here"
+description = "Source code for publication on context-informed incremental learning in regression-based myoelectric control."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
